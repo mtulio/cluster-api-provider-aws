@@ -307,6 +307,23 @@ func TestReconcileBucket(t *testing.T) {
 				t.Fatalf("Expected error")
 			}
 		})
+
+		t.Run("creates_bucket_without_location", func(t *testing.T) {
+			t.Parallel()
+
+			svc, s3Mock := testService(t, &infrav1.S3Bucket{})
+			input := &s3svc.CreateBucketInput{
+				CreateBucketConfiguration: &s3svc.CreateBucketConfiguration{
+					LocationConstraint: nil,
+				},
+			}
+
+			s3Mock.EXPECT().CreateBucket(gomock.Eq(input)).Return(nil, nil).Times(1)
+
+			if err := svc.ReconcileBucket(); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+		})
 	})
 }
 
