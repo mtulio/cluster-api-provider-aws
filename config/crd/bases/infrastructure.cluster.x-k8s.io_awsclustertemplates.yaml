@@ -582,6 +582,28 @@ spec:
                                   enum:
                                   - TCP
                                   type: string
+                                targetHealthCheck:
+                                  description: TargetHealthCheck sets customized ELB
+                                    health check configuration to the target This
+                                    is only applicable to Network Load Balancer (NLB)
+                                    types for the time being.
+                                  properties:
+                                    intervalSeconds:
+                                      format: int64
+                                      type: integer
+                                    path:
+                                      type: string
+                                    port:
+                                      type: string
+                                    protocol:
+                                      type: string
+                                    thresholdCount:
+                                      format: int64
+                                      type: integer
+                                    timeoutSeconds:
+                                      format: int64
+                                      type: integer
+                                  type: object
                               required:
                               - port
                               type: object
@@ -1194,6 +1216,28 @@ spec:
                                   enum:
                                   - TCP
                                   type: string
+                                targetHealthCheck:
+                                  description: TargetHealthCheck sets customized ELB
+                                    health check configuration to the target This
+                                    is only applicable to Network Load Balancer (NLB)
+                                    types for the time being.
+                                  properties:
+                                    intervalSeconds:
+                                      format: int64
+                                      type: integer
+                                    path:
+                                      type: string
+                                    port:
+                                      type: string
+                                    protocol:
+                                      type: string
+                                    thresholdCount:
+                                      format: int64
+                                      type: integer
+                                    timeoutSeconds:
+                                      format: int64
+                                      type: integer
+                                  type: object
                               required:
                               - port
                               type: object

@@ -208,6 +208,9 @@ type AWSLoadBalancerSpec struct {
 	// +optional
 	Subnets []string `json:"subnets,omitempty"`
 
+	// Q: Do we need to keep HealthCheckProtocol as it can be specified in TargetHealthCheck?
+	// Q: Are we planning to allow users to modify advanced health check configs from API LB, such as timeout, threshold count, timeout?
+
 	// HealthCheckProtocol sets the protocol type for ELB health check target
 	// default value is ELBProtocolSSL
 	// +kubebuilder:validation:Enum=TCP;SSL;HTTP;HTTPS;TLS;UDP
@@ -251,11 +254,17 @@ type AdditionalListenerSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	Port int64 `json:"port"`
+
 	// Protocol sets the protocol for the additional listener.
 	// Currently only TCP is supported.
 	// +kubebuilder:validation:Enum=TCP
 	// +kubebuilder:default=TCP
 	Protocol ELBProtocol `json:"protocol,omitempty"`
+
+	// TargetHealthCheck sets customized ELB health check configuration to the target
+	// This is only applicable to Network Load Balancer (NLB) types for the time being.
+	// +optional
+	TargetHealthCheck *TargetGroupHealthCheck `json:"targetHealthCheck,omitempty"`
 }
 
 // AWSClusterStatus defines the observed state of AWSCluster.

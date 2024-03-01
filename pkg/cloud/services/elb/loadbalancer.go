@@ -172,6 +172,22 @@ func (s *Service) getAPIServerLBSpec(elbName string, lbSpec *infrav1.AWSLoadBala
 		scheme = *lbSpec.Scheme
 	}
 
+	// default API health check is TCP, and can be changed to HTTP or HTTPS when HealthCheckProtocol is set.
+	apiHealthCheck := &infrav1.TargetGroupHealthCheck{
+		Protocol: aws.String(string(infrav1.ELBProtocolTCP)),
+		Port:     aws.String(infrav1.DefaultAPIServerPortString),
+	}
+	apiHealthCheckProtocol := s.scope.ControlPlaneLoadBalancer().HealthCheckProtocol.String()
+	if apiHealthCheckProtocol == infrav1.ELBProtocolHTTP.String() || apiHealthCheckProtocol == infrav1.ELBProtocolHTTPS.String() {
+		apiHealthCheck = &infrav1.TargetGroupHealthCheck{
+			Protocol:        aws.String(apiHealthCheckProtocol),
+			Port:            aws.String(infrav1.DefaultAPIServerPortString),
+			Path:            aws.String(infrav1.DefaultAPIHealthCheckPath),
+			IntervalSeconds: aws.Int64(infrav1.DefaultAPIServerHealthCheckIntervalSec),
+			TimeoutSeconds:  aws.Int64(infrav1.DefaultAPIServerHealthCheckTimeoutSec),
+			ThresholdCount:  aws.Int64(infrav1.DefaultAPIServerHealthThresholdCount),
+		}
+	}
 	res := &infrav1.LoadBalancer{
 		Name:          elbName,
 		Scheme:        scheme,
@@ -181,14 +197,11 @@ func (s *Service) getAPIServerLBSpec(elbName string, lbSpec *infrav1.AWSLoadBala
 				Protocol: infrav1.ELBProtocolTCP,
 				Port:     infrav1.DefaultAPIServerPort,
 				TargetGroup: infrav1.TargetGroupSpec{
-					Name:     fmt.Sprintf("apiserver-target-%d", time.Now().Unix()),
-					Port:     infrav1.DefaultAPIServerPort,
-					Protocol: infrav1.ELBProtocolTCP,
-					VpcID:    s.scope.VPC().ID,
-					HealthCheck: &infrav1.TargetGroupHealthCheck{
-						Protocol: aws.String(string(infrav1.ELBProtocolTCP)),
-						Port:     aws.String(infrav1.DefaultAPIServerPortString),
-					},
+					Name:        fmt.Sprintf("apiserver-target-%d", time.Now().Unix()),
+					Port:        infrav1.DefaultAPIServerPort,
+					Protocol:    infrav1.ELBProtocolTCP,
+					VpcID:       s.scope.VPC().ID,
+					HealthCheck: apiHealthCheck,
 				},
 			},
 		},
@@ -196,19 +209,23 @@ func (s *Service) getAPIServerLBSpec(elbName string, lbSpec *infrav1.AWSLoadBala
 	}
 
 	if lbSpec != nil {
-		for _, additionalListeners := range lbSpec.AdditionalListeners {
+		for _, additionalListener := range lbSpec.AdditionalListeners {
+			lnHealthCheck := &infrav1.TargetGroupHealthCheck{
+				Protocol: aws.String(string(additionalListener.Protocol)),
+				Port:     aws.String(strconv.FormatInt(additionalListener.Port, 10)),
+			}
+			if additionalListener.TargetHealthCheck != nil {
+				lnHealthCheck = additionalListener.TargetHealthCheck
+			}
 			res.ELBListeners = append(res.ELBListeners, infrav1.Listener{
-				Protocol: additionalListeners.Protocol,
-				Port:     additionalListeners.Port,
+				Protocol: additionalListener.Protocol,
+				Port:     additionalListener.Port,
 				TargetGroup: infrav1.TargetGroupSpec{
-					Name:     fmt.Sprintf("additional-listener-%d", time.Now().Unix()),
-					Port:     additionalListeners.Port,
-					Protocol: additionalListeners.Protocol,
-					VpcID:    s.scope.VPC().ID,
-					HealthCheck: &infrav1.TargetGroupHealthCheck{
-						Protocol: aws.String(string(additionalListeners.Protocol)),
-						Port:     aws.String(strconv.FormatInt(additionalListeners.Port, 10)),
-					},
+					Name:        fmt.Sprintf("additional-listener-%d", time.Now().Unix()),
+					Port:        additionalListener.Port,
+					Protocol:    additionalListener.Protocol,
+					VpcID:       s.scope.VPC().ID,
+					HealthCheck: lnHealthCheck,
 				},
 			})
 		}
@@ -1002,10 +1019,10 @@ func (s *Service) getAPIServerClassicELBSpec(elbName string) (*infrav1.LoadBalan
 		},
 		HealthCheck: &infrav1.ClassicELBHealthCheck{
 			Target:             s.getHealthCheckTarget(),
-			Interval:           10 * time.Second,
-			Timeout:            5 * time.Second,
+			Interval:           infrav1.DefaultAPIServerHealthCheckIntervalSec * time.Second,
+			Timeout:            infrav1.DefaultAPIServerHealthCheckTimeoutSec * time.Second,
 			HealthyThreshold:   5,
-			UnhealthyThreshold: 3,
+			UnhealthyThreshold: infrav1.DefaultAPIServerHealthThresholdCount,
 		},
 		SecurityGroupIDs: securityGroupIDs,
 		ClassicElbAttributes: infrav1.ClassicELBAttributes{
@@ -1500,7 +1517,7 @@ func (s *Service) getHealthCheckTarget() string {
 	if controlPlaneELB != nil && controlPlaneELB.HealthCheckProtocol != nil {
 		protocol = controlPlaneELB.HealthCheckProtocol
 		if protocol.String() == infrav1.ELBProtocolHTTP.String() || protocol.String() == infrav1.ELBProtocolHTTPS.String() {
-			return fmt.Sprintf("%v:%d/readyz", protocol, infrav1.DefaultAPIServerPort)
+			return fmt.Sprintf("%v:%d%s", protocol, infrav1.DefaultAPIServerPort, infrav1.DefaultAPIHealthCheckPath)
 		}
 	}
 	return fmt.Sprintf("%v:%d", protocol, infrav1.DefaultAPIServerPort)
