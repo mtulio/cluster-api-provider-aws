@@ -251,11 +251,25 @@ type AdditionalListenerSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	Port int64 `json:"port"`
+
 	// Protocol sets the protocol for the additional listener.
 	// Currently only TCP is supported.
 	// +kubebuilder:validation:Enum=TCP
 	// +kubebuilder:default=TCP
 	Protocol ELBProtocol `json:"protocol,omitempty"`
+
+	// TargetHealthCheck sets customized ELB health check configuration to the target
+	// This is only applicable to Network Load Balancer (NLB) types for the time being.
+	// +optional
+	TargetHealthCheck *AdditionalTargetGroupHealthCheck `json:"targetHealthCheck,omitempty"`
+}
+
+// AdditionalTargetGroupHealthCheck defines health check settings for the target group.
+type AdditionalTargetGroupHealthCheck struct {
+	Path            *string `json:"path,omitempty"`
+	IntervalSeconds *int64  `json:"intervalSeconds,omitempty"`
+	TimeoutSeconds  *int64  `json:"timeoutSeconds,omitempty"`
+	ThresholdCount  *int64  `json:"thresholdCount,omitempty"`
 }
 
 // AWSClusterStatus defines the observed state of AWSCluster.

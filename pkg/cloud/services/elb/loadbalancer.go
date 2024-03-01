@@ -196,19 +196,34 @@ func (s *Service) getAPIServerLBSpec(elbName string, lbSpec *infrav1.AWSLoadBala
 	}
 
 	if lbSpec != nil {
-		for _, additionalListeners := range lbSpec.AdditionalListeners {
+		for _, additionalListener := range lbSpec.AdditionalListeners {
+			lnHealthCheck := &infrav1.TargetGroupHealthCheck{
+				Protocol: aws.String(string(additionalListener.Protocol)),
+				Port:     aws.String(strconv.FormatInt(additionalListener.Port, 10)),
+			}
+			if additionalListener.TargetHealthCheck != nil {
+				if additionalListener.TargetHealthCheck.Path != nil {
+					lnHealthCheck.Path = additionalListener.TargetHealthCheck.Path
+				}
+				if additionalListener.TargetHealthCheck.IntervalSeconds != nil {
+					lnHealthCheck.IntervalSeconds = additionalListener.TargetHealthCheck.IntervalSeconds
+				}
+				if additionalListener.TargetHealthCheck.TimeoutSeconds != nil {
+					lnHealthCheck.TimeoutSeconds = additionalListener.TargetHealthCheck.TimeoutSeconds
+				}
+				if additionalListener.TargetHealthCheck.ThresholdCount != nil {
+					lnHealthCheck.ThresholdCount = additionalListener.TargetHealthCheck.ThresholdCount
+				}
+			}
 			res.ELBListeners = append(res.ELBListeners, infrav1.Listener{
-				Protocol: additionalListeners.Protocol,
-				Port:     additionalListeners.Port,
+				Protocol: additionalListener.Protocol,
+				Port:     additionalListener.Port,
 				TargetGroup: infrav1.TargetGroupSpec{
-					Name:     fmt.Sprintf("additional-listener-%d", time.Now().Unix()),
-					Port:     additionalListeners.Port,
-					Protocol: additionalListeners.Protocol,
-					VpcID:    s.scope.VPC().ID,
-					HealthCheck: &infrav1.TargetGroupHealthCheck{
-						Protocol: aws.String(string(additionalListeners.Protocol)),
-						Port:     aws.String(strconv.FormatInt(additionalListeners.Port, 10)),
-					},
+					Name:        fmt.Sprintf("additional-listener-%d", time.Now().Unix()),
+					Port:        additionalListener.Port,
+					Protocol:    additionalListener.Protocol,
+					VpcID:       s.scope.VPC().ID,
+					HealthCheck: lnHealthCheck,
 				},
 			})
 		}
