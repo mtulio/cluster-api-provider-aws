@@ -226,6 +226,13 @@ type AWSLoadBalancerSpec struct {
 	// +optional
 	AdditionalListeners []AdditionalListenerSpec `json:"additionalListeners,omitempty"`
 
+	// Listeners sets the additional listeners for the control plane load balancer.
+	// This is only applicable to Network Load Balancer (NLB) types for the time being.
+	// +listType=map
+	// +listMapKey=port
+	// +optional
+	Listeners []Listener `json:"listeners,omitempty"`
+
 	// IngressRules sets the ingress rules for the control plane load balancer.
 	// +optional
 	IngressRules []IngressRule `json:"ingressRules,omitempty"`

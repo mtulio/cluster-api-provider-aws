@@ -700,6 +700,82 @@ spec:
                               - toPort
                               type: object
                             type: array
+                          listeners:
+                            description: Listeners sets the additional listeners for
+                              the control plane load balancer. This is only applicable
+                              to Network Load Balancer (NLB) types for the time being.
+                            items:
+                              description: Listener defines an AWS network load balancer
+                                listener.
+                              properties:
+                                port:
+                                  format: int64
+                                  type: integer
+                                protocol:
+                                  description: ELBProtocol defines listener protocols
+                                    for a load balancer.
+                                  type: string
+                                targetGroup:
+                                  description: TargetGroupSpec specifies target group
+                                    settings for a given listener. This is created
+                                    first, and the ARN is then passed to the listener.
+                                  properties:
+                                    name:
+                                      description: Name of the TargetGroup. Must be
+                                        unique over the same group of listeners.
+                                      type: string
+                                    port:
+                                      description: Port is the exposed port
+                                      format: int64
+                                      type: integer
+                                    protocol:
+                                      description: ELBProtocol defines listener protocols
+                                        for a load balancer.
+                                      enum:
+                                      - tcp
+                                      - tls
+                                      - udp
+                                      - TCP
+                                      - TLS
+                                      - UDP
+                                      type: string
+                                    targetGroupHealthCheck:
+                                      description: HealthCheck is the elb health check
+                                        associated with the load balancer.
+                                      properties:
+                                        intervalSeconds:
+                                          format: int64
+                                          type: integer
+                                        path:
+                                          type: string
+                                        port:
+                                          type: string
+                                        protocol:
+                                          type: string
+                                        thresholdCount:
+                                          format: int64
+                                          type: integer
+                                        timeoutSeconds:
+                                          format: int64
+                                          type: integer
+                                      type: object
+                                    vpcId:
+                                      type: string
+                                  required:
+                                  - name
+                                  - port
+                                  - protocol
+                                  - vpcId
+                                  type: object
+                              required:
+                              - port
+                              - protocol
+                              - targetGroup
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - port
+                            x-kubernetes-list-type: map
                           loadBalancerType:
                             default: classic
                             description: LoadBalancerType sets the type for a load
@@ -1312,6 +1388,82 @@ spec:
                               - toPort
                               type: object
                             type: array
+                          listeners:
+                            description: Listeners sets the additional listeners for
+                              the control plane load balancer. This is only applicable
+                              to Network Load Balancer (NLB) types for the time being.
+                            items:
+                              description: Listener defines an AWS network load balancer
+                                listener.
+                              properties:
+                                port:
+                                  format: int64
+                                  type: integer
+                                protocol:
+                                  description: ELBProtocol defines listener protocols
+                                    for a load balancer.
+                                  type: string
+                                targetGroup:
+                                  description: TargetGroupSpec specifies target group
+                                    settings for a given listener. This is created
+                                    first, and the ARN is then passed to the listener.
+                                  properties:
+                                    name:
+                                      description: Name of the TargetGroup. Must be
+                                        unique over the same group of listeners.
+                                      type: string
+                                    port:
+                                      description: Port is the exposed port
+                                      format: int64
+                                      type: integer
+                                    protocol:
+                                      description: ELBProtocol defines listener protocols
+                                        for a load balancer.
+                                      enum:
+                                      - tcp
+                                      - tls
+                                      - udp
+                                      - TCP
+                                      - TLS
+                                      - UDP
+                                      type: string
+                                    targetGroupHealthCheck:
+                                      description: HealthCheck is the elb health check
+                                        associated with the load balancer.
+                                      properties:
+                                        intervalSeconds:
+                                          format: int64
+                                          type: integer
+                                        path:
+                                          type: string
+                                        port:
+                                          type: string
+                                        protocol:
+                                          type: string
+                                        thresholdCount:
+                                          format: int64
+                                          type: integer
+                                        timeoutSeconds:
+                                          format: int64
+                                          type: integer
+                                      type: object
+                                    vpcId:
+                                      type: string
+                                  required:
+                                  - name
+                                  - port
+                                  - protocol
+                                  - vpcId
+                                  type: object
+                              required:
+                              - port
+                              - protocol
+                              - targetGroup
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - port
+                            x-kubernetes-list-type: map
                           loadBalancerType:
                             default: classic
                             description: LoadBalancerType sets the type for a load

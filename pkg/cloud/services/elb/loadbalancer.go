@@ -172,26 +172,28 @@ func (s *Service) getAPIServerLBSpec(elbName string, lbSpec *infrav1.AWSLoadBala
 		scheme = *lbSpec.Scheme
 	}
 
-	res := &infrav1.LoadBalancer{
-		Name:          elbName,
-		Scheme:        scheme,
-		ELBAttributes: make(map[string]*string),
-		ELBListeners: []infrav1.Listener{
-			{
-				Protocol: infrav1.ELBProtocolTCP,
+	listeners := []infrav1.Listener{
+		{
+			Protocol: infrav1.ELBProtocolTCP,
+			Port:     infrav1.DefaultAPIServerPort,
+			TargetGroup: infrav1.TargetGroupSpec{
+				Name:     fmt.Sprintf("apiserver-target-%d", time.Now().Unix()),
 				Port:     infrav1.DefaultAPIServerPort,
-				TargetGroup: infrav1.TargetGroupSpec{
-					Name:     fmt.Sprintf("apiserver-target-%d", time.Now().Unix()),
-					Port:     infrav1.DefaultAPIServerPort,
-					Protocol: infrav1.ELBProtocolTCP,
-					VpcID:    s.scope.VPC().ID,
-					HealthCheck: &infrav1.TargetGroupHealthCheck{
-						Protocol: aws.String(string(infrav1.ELBProtocolTCP)),
-						Port:     aws.String(infrav1.DefaultAPIServerPortString),
-					},
+				Protocol: infrav1.ELBProtocolTCP,
+				VpcID:    s.scope.VPC().ID,
+				HealthCheck: &infrav1.TargetGroupHealthCheck{
+					Protocol: aws.String(string(infrav1.ELBProtocolTCP)),
+					Port:     aws.String(infrav1.DefaultAPIServerPortString),
 				},
 			},
 		},
+	}
+
+	res := &infrav1.LoadBalancer{
+		Name:             elbName,
+		Scheme:           scheme,
+		ELBAttributes:    make(map[string]*string),
+		ELBListeners:     listeners,
 		SecurityGroupIDs: securityGroupIDs,
 	}
 

@@ -584,6 +584,13 @@ func (in *AWSLoadBalancerSpec) DeepCopyInto(out *AWSLoadBalancerSpec) {
 		*out = make([]AdditionalListenerSpec, len(*in))
 		copy(*out, *in)
 	}
+	if in.Listeners != nil {
+		in, out := &in.Listeners, &out.Listeners
+		*out = make([]Listener, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.IngressRules != nil {
 		in, out := &in.IngressRules, &out.IngressRules
 		*out = make([]IngressRule, len(*in))
