@@ -378,6 +378,19 @@ func (s *Service) createLB(spec *infrav1.LoadBalancer, lbSpec *infrav1.AWSLoadBa
 		input.IpAddressType = aws.String("dualstack")
 	}
 
+	// Allocate public ipv4 from custom pools, when defined.
+	// Only internet facing supports custom PublicIpv4Pool
+	if s.scope.VPC().PublicIpv4Pool != nil && spec.Scheme == infrav1.ELBSchemeInternetFacing {
+		if err := s.createLBAddressesFromPublicIpv4Pool(input, "lb-apiserver"); err != nil {
+			return nil, errors.Wrapf(err, "failed to create load balancer with custom EIPs: %v", spec)
+		}
+	}
+
+	// Subnets and SubnetMappings are mutual exclusive.
+	if len(input.SubnetMappings) == 0 {
+		input.Subnets = aws.StringSlice(spec.SubnetIDs)
+	}
+
 	out, err := s.ELBV2Client.CreateLoadBalancer(input)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create load balancer: %v", spec)

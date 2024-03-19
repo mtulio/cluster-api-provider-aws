@@ -182,20 +182,7 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 	}
 	input.SubnetID = subnetID
 
-	if ptr.Deref(scope.AWSMachine.Spec.PublicIP, false) {
-		subnets, err := s.getFilteredSubnets(&ec2.Filter{
-			Name:   aws.String("subnet-id"),
-			Values: aws.StringSlice([]string{subnetID}),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("could not query if subnet has MapPublicIpOnLaunch set: %w", err)
-		}
-		if len(subnets) == 0 {
-			return nil, fmt.Errorf("expected to find subnet %q", subnetID)
-		}
-		// If the subnet does not assign public IPs, set that option in the instance's network interface
-		input.PublicIPOnLaunch = ptr.To(!aws.BoolValue(subnets[0].MapPublicIpOnLaunch))
-	}
+	input.PublicIPOnLaunch = ptr.To(ptr.Deref(scope.AWSMachine.Spec.PublicIP, false))
 
 	if !scope.IsControlPlaneExternallyManaged() && !scope.IsExternallyManaged() && !scope.IsEKSManaged() && s.scope.Network().APIServerELB.DNSName == "" {
 		record.Eventf(s.scope.InfraCluster(), "FailedCreateInstance", "Failed to run controlplane, APIServer ELB not available")
@@ -545,6 +532,17 @@ func (s *Service) runInstance(role string, i *infrav1.Instance) (*infrav1.Instan
 		UserData:     i.UserData,
 	}
 
+	// Public IP address from BYO Public IPv4 need to be associated after launch (main machine
+	// reconciliate loop).
+	// To prevent duplicated public IP, the map on launch should be explicitly
+	// disabled in instances with PublicIP set on spec.
+	mapPublicIPOnLaunch := ptr.Deref(i.PublicIPOnLaunch, false)
+	if s.scope.VPC().PublicIpv4Pool != nil {
+		mapPublicIPOnLaunch = false
+	}
+
+	fmt.Printf("\n\nmapPublicIPOnLaunch => %v\n\n", mapPublicIPOnLaunch)
+
 	s.scope.Debug("userData size", "bytes", len(*i.UserData), "role", role)
 
 	if len(i.NetworkInterfaces) > 0 {
@@ -556,17 +554,17 @@ func (s *Service) runInstance(role string, i *infrav1.Instance) (*infrav1.Instan
 				DeviceIndex:        aws.Int64(int64(index)),
 			})
 		}
-		netInterfaces[0].AssociatePublicIpAddress = i.PublicIPOnLaunch
+		netInterfaces[0].AssociatePublicIpAddress = aws.Bool(mapPublicIPOnLaunch)
 
 		input.NetworkInterfaces = netInterfaces
 	} else {
-		if ptr.Deref(i.PublicIPOnLaunch, false) {
+		if mapPublicIPOnLaunch {
 			input.NetworkInterfaces = []*ec2.InstanceNetworkInterfaceSpecification{
 				{
 					DeviceIndex:              aws.Int64(0),
 					SubnetId:                 aws.String(i.SubnetID),
 					Groups:                   aws.StringSlice(i.SecurityGroupIDs),
-					AssociatePublicIpAddress: i.PublicIPOnLaunch,
+					AssociatePublicIpAddress: aws.Bool(mapPublicIPOnLaunch),
 				},
 			}
 		} else {

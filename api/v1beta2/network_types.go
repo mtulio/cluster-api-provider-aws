@@ -455,6 +455,27 @@ type VPCSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum:=ip-name;resource-name
 	PrivateDNSHostnameTypeOnLaunch *string `json:"privateDnsHostnameTypeOnLaunch,omitempty"`
+
+	// PublicIpv4Pool defines the Public IPv4 Pool to be used for VPC resources created
+	// in public subnets.
+	//
+	// +kubebuilder:validation:MaxLength=30
+	// +kubebuilder:validation:XValidation:rule="self.startsWith('ipv4pool-ec2-')",message="publicIpv4Pool must start with 'ipv4pool-ec2-'"
+	// +optional
+	PublicIpv4Pool *string `json:"publicIpv4Pool,omitempty"`
+
+	// PublicIpv4PoolFallBackOrder defines the fallback when the Public IPv4 Pool has been exhausted,
+	// no more IPv4 address available in the pool. NOTE: this is not implemented yet.
+	//
+	// When amazon-provided, and the PublicIpv4Pool is set, the controller check if the pool has available IPv4,
+	// and if not it fallback to Amazon pool.
+	//
+	// When 'none' it will not use any fallback strategy and will fail to provision when the fallback
+	// is trigeredin public subnets.
+	//
+	// +kubebuilder:validation:Enum:=amazon-provided;none
+	// +optional
+	PublicIpv4PoolFallBackOrder *PublicIpv4PoolFallbackOrder `json:"publicIpv4PoolFallbackOrder,omitempty"`
 }
 
 // String returns a string representation of the VPC.
@@ -1001,4 +1022,28 @@ func (z ZoneType) String() string {
 // Equal compares two zone types.
 func (z ZoneType) Equal(other ZoneType) bool {
 	return z == other
+}
+
+// PublicIpv4PoolFallbackOrder defines the list of available fallback
+// strategies when the PublicIpv4Pool is exhausted.
+// 'none' let the controllers return failures when the PublicIpv4Pool is exhausted - no more IPv4 available.
+// 'amazon-pool' let the controllers to skip the PublicIpv4Pool and use the Amazon pool, the default.
+// +kubebuilder:validation:XValidation:rule="self in ['none','amazon-pool']",message="allowed values are 'none' and 'amazon-pool'"
+type PublicIpv4PoolFallbackOrder string
+
+const (
+	// PublicIpv4PoolFallbackOrderAmazonPool refers to use Amazon-provided Public IPv4 Pool as a fallback strategy.
+	PublicIpv4PoolFallbackOrderAmazonPool = PublicIpv4PoolFallbackOrder("amazon-pool")
+
+	// PublicIpv4PoolFallbackOrderNone refers to not use any fallback strategy.
+	PublicIpv4PoolFallbackOrderNone = PublicIpv4PoolFallbackOrder("none")
+)
+
+func (r PublicIpv4PoolFallbackOrder) String() string {
+	return string(r)
+}
+
+// Equal compares PublicIpv4PoolFallbackOrder types and return true if input param is equal.
+func (r PublicIpv4PoolFallbackOrder) Equal(e PublicIpv4PoolFallbackOrder) bool {
+	return r == e
 }

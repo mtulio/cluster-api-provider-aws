@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package network
+package eip
 
 import (
 	"context"
@@ -160,15 +160,20 @@ func TestServiceReleaseAddresses(t *testing.T) {
 			})
 			g.Expect(err).NotTo(HaveOccurred())
 
-			s := NewService(cs)
-			s.EC2Client = ec2Mock
+			s := NewService(&ServiceInput{
+				EC2Client:      ec2Mock,
+				AdditionalTags: cs.AdditionalTags(),
+				InfraCluster:   cs.InfraCluster(),
+				VPC:            cs.VPC(),
+				Name:           cs.Name(),
+			})
 
 			if tt.expect != nil {
 				tt.expect(ec2Mock.EXPECT())
 			}
 
-			if err := s.releaseAddresses(); (err != nil) != tt.wantErr {
-				t.Errorf("releaseAddresses() error = %v, wantErr %v", err, tt.wantErr)
+			if err := s.ReleaseAddresses(); (err != nil) != tt.wantErr {
+				t.Errorf("ReleaseAddresses() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

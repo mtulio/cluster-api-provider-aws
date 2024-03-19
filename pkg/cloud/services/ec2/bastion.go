@@ -82,6 +82,7 @@ func (s *Service) ReconcileBastion() error {
 			record.Warnf(s.scope.InfraCluster(), "FailedFetchingBastion", "Failed to fetch default bastion instance: %v", err)
 			return err
 		}
+		// TODO(mtulio): add support of BYO IP for bastion
 		instance, err = s.runInstance("bastion", defaultBastion)
 		if err != nil {
 			record.Warnf(s.scope.InfraCluster(), "FailedCreateBastion", "Failed to create bastion instance: %v", err)
