@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package network
+package eip
 
 import (
 	"context"
@@ -32,13 +32,14 @@ import (
 	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/record"
 )
 
-func (s *Service) getOrAllocateAddresses(num int, role string) (eips []string, err error) {
+func (s *Service) GetOrAllocateAddresses(num int, role string) (eips []string, err error) {
 	out, err := s.describeAddresses(role)
 	if err != nil {
-		record.Eventf(s.scope.InfraCluster(), "FailedDescribeAddresses", "Failed to query addresses for role %q: %v", role, err)
+		record.Eventf(s.InfraCluster(), "FailedDescribeAddresses", "Failed to query addresses for role %q: %v", role, err)
 		return nil, errors.Wrap(err, "failed to query addresses")
 	}
 
+	// Reuse existing unallocated addreses with the same role.
 	for _, address := range out.Addresses {
 		if address.AssociationId == nil {
 			eips = append(eips, aws.StringValue(address.AllocationId))
@@ -58,22 +59,36 @@ func (s *Service) getOrAllocateAddresses(num int, role string) (eips []string, e
 
 func (s *Service) allocateAddress(role string) (string, error) {
 	tagSpecifications := tags.BuildParamsToTagSpecification(ec2.ResourceTypeElasticIp, s.getEIPTagParams(role))
-	out, err := s.EC2Client.AllocateAddressWithContext(context.TODO(), &ec2.AllocateAddressInput{
+	allocInput := &ec2.AllocateAddressInput{
 		Domain: aws.String("vpc"),
 		TagSpecifications: []*ec2.TagSpecification{
 			tagSpecifications,
 		},
-	})
-	if err != nil {
-		record.Warnf(s.scope.InfraCluster(), "FailedAllocateEIP", "Failed to allocate Elastic IP for %q: %v", role, err)
-		return "", errors.Wrap(err, "failed to allocate Elastic IP")
 	}
 
+	if s.VPC().PublicIpv4Pool != nil {
+		ok, err := s.publicIpv4PoolHasFreeIPs(1)
+		if err != nil {
+			record.Warnf(s.InfraCluster(), "FailedAllocateEIP", "Failed to allocate Elastic IP for %q in Public IPv4 Pool %s", role, s.VPC().PublicIpv4Pool)
+			return "", errors.New("failed to allocate Elastic IP from PublicIpv4 Pool")
+		}
+		if !ok && s.VPC().PublicIpv4PoolFallBackOrder != nil && s.VPC().PublicIpv4PoolFallBackOrder.Equal(infrav1.PublicIpv4PoolFallbackOrderNone) {
+			record.Warnf(s.InfraCluster(), "FailedAllocateEIPFromBYOIP", "Failed to allocate Elastic IP for %q in Public IPv4 Pool %s and fallback isnt enabled//", role, s.VPC().PublicIpv4Pool)
+			return "", fmt.Errorf("failed to allocate Elastic IP from PublicIpv4 Pool and use fallback with strategy %s", *s.VPC().PublicIpv4PoolFallBackOrder)
+		}
+		allocInput.PublicIpv4Pool = s.VPC().PublicIpv4Pool
+	}
+
+	out, err := s.EC2Client.AllocateAddressWithContext(context.TODO(), allocInput)
+	if err != nil {
+		record.Warnf(s.InfraCluster(), "FailedAllocateEIP", "Failed to allocate Elastic IP for %q: %v", role, err)
+		return "", errors.Wrap(err, "failed to allocate Elastic IP")
+	}
 	return aws.StringValue(out.AllocationId), nil
 }
 
 func (s *Service) describeAddresses(role string) (*ec2.DescribeAddressesOutput, error) {
-	x := []*ec2.Filter{filter.EC2.Cluster(s.scope.Name())}
+	x := []*ec2.Filter{filter.EC2.Cluster(s.Name())}
 	if role != "" {
 		x = append(x, filter.EC2.ProviderRole(role))
 	}
@@ -97,15 +112,15 @@ func (s *Service) disassociateAddress(ip *ec2.Address) error {
 		return true, nil
 	}, awserrors.AuthFailure)
 	if err != nil {
-		record.Warnf(s.scope.InfraCluster(), "FailedDisassociateEIP", "Failed to disassociate Elastic IP %q: %v", *ip.AllocationId, err)
+		record.Warnf(s.InfraCluster(), "FailedDisassociateEIP", "Failed to disassociate Elastic IP %q: %v", *ip.AllocationId, err)
 		return errors.Wrapf(err, "failed to disassociate Elastic IP %q", *ip.AllocationId)
 	}
 	return nil
 }
 
-func (s *Service) releaseAddresses() error {
+func (s *Service) ReleaseAddresses() error {
 	out, err := s.EC2Client.DescribeAddressesWithContext(context.TODO(), &ec2.DescribeAddressesInput{
-		Filters: []*ec2.Filter{filter.EC2.Cluster(s.scope.Name())},
+		Filters: []*ec2.Filter{filter.EC2.Cluster(s.Name())},
 	})
 	if err != nil {
 		return errors.Wrapf(err, "failed to describe elastic IPs %q", err)
@@ -119,7 +134,7 @@ func (s *Service) releaseAddresses() error {
 			if _, err := s.EC2Client.DisassociateAddressWithContext(context.TODO(), &ec2.DisassociateAddressInput{
 				AssociationId: ip.AssociationId,
 			}); err != nil {
-				record.Warnf(s.scope.InfraCluster(), "FailedDisassociateEIP", "Failed to disassociate Elastic IP %q: %v", *ip.AllocationId, err)
+				record.Warnf(s.InfraCluster(), "FailedDisassociateEIP", "Failed to disassociate Elastic IP %q: %v", *ip.AllocationId, err)
 				return errors.Errorf("failed to disassociate Elastic IP %q with allocation ID %q: Still associated with association ID %q", *ip.PublicIp, *ip.AllocationId, *ip.AssociationId)
 			}
 		}
@@ -136,23 +151,63 @@ func (s *Service) releaseAddresses() error {
 			}
 			return true, nil
 		}, awserrors.AuthFailure, awserrors.InUseIPAddress); err != nil {
-			record.Warnf(s.scope.InfraCluster(), "FailedReleaseEIP", "Failed to disassociate Elastic IP %q: %v", *ip.AllocationId, err)
+			record.Warnf(s.InfraCluster(), "FailedReleaseEIP", "Failed to disassociate Elastic IP %q: %v", *ip.AllocationId, err)
 			return errors.Wrapf(err, "failed to release ElasticIP %q", *ip.AllocationId)
 		}
 
-		s.scope.Info("released ElasticIP", "eip", *ip.PublicIp, "allocation-id", *ip.AllocationId)
+		s.Info("released ElasticIP", "eip", *ip.PublicIp, "allocation-id", *ip.AllocationId)
 	}
 	return nil
 }
 
 func (s *Service) getEIPTagParams(role string) infrav1.BuildParams {
-	name := fmt.Sprintf("%s-eip-%s", s.scope.Name(), role)
+	name := fmt.Sprintf("%s-eip-%s", s.Name(), role)
 
 	return infrav1.BuildParams{
-		ClusterName: s.scope.Name(),
+		ClusterName: s.Name(),
 		Lifecycle:   infrav1.ResourceLifecycleOwned,
 		Name:        aws.String(name),
 		Role:        aws.String(role),
-		Additional:  s.scope.AdditionalTags(),
+		Additional:  s.AdditionalTags(),
 	}
+}
+
+func (s *Service) GetAndAssociateAddressesToInstance(num int, role string, instance string) (err error) {
+	eips, err := s.GetOrAllocateAddresses(num, role)
+	if err != nil {
+		record.Warnf(s.InfraCluster(), "FailedAllocateEIP", "Failed to get Elastic IP for %q: %v", role, err)
+		return err
+	}
+	if len(eips) != 1 {
+		record.Warnf(s.InfraCluster(), "FailedAllocateEIP", "Failed to allocate Elastic IP for %q: %v", role, err)
+		return errors.Wrapf(err, "unexpected number of Elastic IP to instance %s: %d", instance, len(eips))
+	}
+	_, err = s.EC2Client.AssociateAddressWithContext(context.TODO(), &ec2.AssociateAddressInput{
+		InstanceId:   aws.String(instance),
+		AllocationId: aws.String(eips[0]),
+	})
+	if err != nil {
+		record.Warnf(s.InfraCluster(), "FailedAssociateEIP", "Failed to associate Elastic IP for %q: %v", role, err)
+		return errors.Wrapf(err, "failed to associate Elastic IP %s to instance %s", eips[0], instance)
+	}
+	return nil
+
+}
+
+func (s *Service) publicIpv4PoolHasFreeIPs(want int64) (bool, error) {
+	pools, err := s.EC2Client.DescribePublicIpv4Pools(&ec2.DescribePublicIpv4PoolsInput{
+		PoolIds: []*string{s.VPC().PublicIpv4Pool},
+	})
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to describe Public IPv4 Pool %v: %q", s.VPC().PublicIpv4Pool, err)
+	}
+	if len(pools.PublicIpv4Pools) != 1 {
+		return false, fmt.Errorf("unexpected number of Public IPv4 Pools. want 1, got %d", len(pools.PublicIpv4Pools))
+	}
+	freeIPs := aws.Int64Value(pools.PublicIpv4Pools[0].TotalAvailableAddressCount)
+	if freeIPs < want {
+		return false, fmt.Errorf("the pool %v does not have requested size. want %d, got %d", s.VPC().PublicIpv4Pool, want, freeIPs)
+	}
+	s.Debug("public IPv4 pool has %d IPs available", "eip", freeIPs)
+	return true, nil
 }

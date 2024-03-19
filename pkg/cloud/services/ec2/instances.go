@@ -256,9 +256,19 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 
 	input.PrivateDNSName = scope.AWSMachine.Spec.PrivateDNSName
 
+	isPublicConfig := ptr.Deref(input.PublicIPOnLaunch, false)
+	mapPublicIPOnLaunch := isPublicConfig
+	// forces to not create associate public IPv4 when launching instances
+	// when a IPv4 Pool is set on cluster scope, preventing duplicated EIP
+	// allocation. The EIP from the pool is associated to the instance after
+	// launch when PublicIPOnLaunch is set.
+	if isPublicConfig && s.scope.VPC().PublicIpv4Pool != nil {
+		mapPublicIPOnLaunch = false
+	}
+
 	s.scope.Debug("Running instance", "machine-role", scope.Role())
 	s.scope.Debug("Running instance with instance metadata options", "metadata options", input.InstanceMetadataOptions)
-	out, err := s.runInstance(scope.Role(), input)
+	out, err := s.runInstance(scope.Role(), input, mapPublicIPOnLaunch)
 	if err != nil {
 		// Only record the failure event if the error is not related to failed dependencies.
 		// This is to avoid spamming failure events since the machine will be requeued by the actuator.
@@ -271,6 +281,14 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 	// Set the providerID and instanceID as soon as we create an instance so that we keep it in case of errors afterward
 	scope.SetProviderID(out.ID, out.AvailabilityZone)
 	scope.SetInstanceID(out.ID)
+
+	// Attaching EIPs to instance when BYO IPv4 is set.
+	if isPublicConfig && s.scope.VPC().PublicIpv4Pool != nil {
+		err := s.eip.GetAndAssociateAddressesToInstance(1, fmt.Sprintf("ec2-%s", out.ID), out.ID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to allocate EIP from Custom Public IPv4 Pool: %v", s.scope.VPC().PublicIpv4Pool)
+		}
+	}
 
 	if len(input.NetworkInterfaces) > 0 {
 		for _, id := range input.NetworkInterfaces {
@@ -534,7 +552,7 @@ func (s *Service) TerminateInstanceAndWait(instanceID string) error {
 	return nil
 }
 
-func (s *Service) runInstance(role string, i *infrav1.Instance) (*infrav1.Instance, error) {
+func (s *Service) runInstance(role string, i *infrav1.Instance, mapPublicIP bool) (*infrav1.Instance, error) {
 	input := &ec2.RunInstancesInput{
 		InstanceType: aws.String(i.Type),
 		ImageId:      aws.String(i.ImageID),
@@ -556,17 +574,17 @@ func (s *Service) runInstance(role string, i *infrav1.Instance) (*infrav1.Instan
 				DeviceIndex:        aws.Int64(int64(index)),
 			})
 		}
-		netInterfaces[0].AssociatePublicIpAddress = i.PublicIPOnLaunch
+		netInterfaces[0].AssociatePublicIpAddress = aws.Bool(mapPublicIP)
 
 		input.NetworkInterfaces = netInterfaces
 	} else {
-		if ptr.Deref(i.PublicIPOnLaunch, false) {
+		if mapPublicIP {
 			input.NetworkInterfaces = []*ec2.InstanceNetworkInterfaceSpecification{
 				{
 					DeviceIndex:              aws.Int64(0),
 					SubnetId:                 aws.String(i.SubnetID),
 					Groups:                   aws.StringSlice(i.SecurityGroupIDs),
-					AssociatePublicIpAddress: i.PublicIPOnLaunch,
+					AssociatePublicIpAddress: aws.Bool(mapPublicIP),
 				},
 			}
 		} else {

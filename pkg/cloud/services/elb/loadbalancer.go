@@ -355,6 +355,42 @@ func (s *Service) getAPIServerLBSpec(elbName string, lbSpec *infrav1.AWSLoadBala
 	return res, nil
 }
 
+func (s *Service) createLBAddressesFromPublicIpv4Pool(input *elbv2.CreateLoadBalancerInput, role string) error {
+	// Does not require
+	if s.scope.VPC().PublicIpv4Pool == nil {
+		return nil
+	}
+
+	// Only NLB is supported
+	if *input.Type != string(elbv2.LoadBalancerTypeEnumNetwork) {
+		return fmt.Errorf("custom PublicIpv4Pool is supported only with Network Load Balancer type: %s", *input.Type)
+	}
+
+	// Custom SubnetMappings should not be defined, replaced user-defined mapping
+	if len(input.SubnetMappings) > 0 {
+		return fmt.Errorf("custom PublicIpv4Pool is mutual exclusive with SubnetMappings: %v", input.SubnetMappings)
+	}
+
+	eips, err := s.eip.GetOrAllocateAddresses(len(input.Subnets), role)
+	if err != nil {
+		return errors.Wrapf(err, "failed to allocate EIP from Custom Public IPv4 Pool %v to role: %s", s.scope.VPC().PublicIpv4Pool, role)
+	}
+	if len(eips) != len(input.Subnets) {
+		return fmt.Errorf("allocated EIPs (%d) missmatch with the subnet count (%d)", len(eips), len(input.Subnets))
+	}
+	for cnt, sb := range input.Subnets {
+		input.SubnetMappings = append(input.SubnetMappings, &elbv2.SubnetMapping{
+			SubnetId:     aws.String(*sb),
+			AllocationId: aws.String(eips[cnt]),
+		})
+	}
+	// Subnets and SubnetMappings are mutual exclusive. Cleaning Subnets when BYO IP is defined,
+	// and SubnetMappings are mounted.
+	input.Subnets = []*string{}
+
+	return nil
+}
+
 func (s *Service) createLB(spec *infrav1.LoadBalancer, lbSpec *infrav1.AWSLoadBalancerSpec) (*infrav1.LoadBalancer, error) {
 	var t *string
 	switch lbSpec.LoadBalancerType {
@@ -376,6 +412,19 @@ func (s *Service) createLB(spec *infrav1.LoadBalancer, lbSpec *infrav1.AWSLoadBa
 
 	if s.scope.VPC().IsIPv6Enabled() {
 		input.IpAddressType = aws.String("dualstack")
+	}
+
+	// Allocate public ipv4 from custom pools, when defined.
+	// Only internet facing supports custom PublicIpv4Pool
+	if s.scope.VPC().PublicIpv4Pool != nil && spec.Scheme == infrav1.ELBSchemeInternetFacing {
+		if err := s.createLBAddressesFromPublicIpv4Pool(input, "lb-apiserver"); err != nil {
+			return nil, errors.Wrapf(err, "failed to create load balancer with custom EIPs: %v", spec)
+		}
+	}
+
+	// Subnets and SubnetMappings are mutual exclusive.
+	if len(input.SubnetMappings) == 0 {
+		input.Subnets = aws.StringSlice(spec.SubnetIDs)
 	}
 
 	out, err := s.ELBV2Client.CreateLoadBalancer(input)

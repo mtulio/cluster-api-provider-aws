@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
 
 	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/scope"
+	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/services/network/eip"
 )
 
 // Service holds a collection of interfaces.
@@ -29,6 +30,7 @@ import (
 // One alternative is to have a large list of functions from the ec2 client.
 type Service struct {
 	scope     scope.EC2Scope
+	eip       eip.Service
 	EC2Client ec2iface.EC2API
 
 	// SSMClient is used to look up the official EKS AMI ID
@@ -37,9 +39,11 @@ type Service struct {
 
 // NewService returns a new service given the ec2 api client.
 func NewService(clusterScope scope.EC2Scope) *Service {
-	return &Service{
+	s := &Service{
 		scope:     clusterScope,
 		EC2Client: scope.NewEC2Client(clusterScope, clusterScope, clusterScope, clusterScope.InfraCluster()),
 		SSMClient: scope.NewSSMClient(clusterScope, clusterScope, clusterScope, clusterScope.InfraCluster()),
 	}
+	s.eip = *eip.NewServiceWithEC2Scope(s.scope, s.EC2Client)
+	return s
 }

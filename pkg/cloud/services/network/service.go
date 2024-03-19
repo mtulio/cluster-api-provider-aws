@@ -21,6 +21,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
 	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/scope"
+
+	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/services/network/eip"
 )
 
 // Service holds a collection of interfaces.
@@ -28,13 +30,16 @@ import (
 // One alternative is to have a large list of functions from the ec2 client.
 type Service struct {
 	scope     scope.NetworkScope
+	eip       *eip.Service
 	EC2Client ec2iface.EC2API
 }
 
 // NewService returns a new service given the ec2 api client.
 func NewService(networkScope scope.NetworkScope) *Service {
-	return &Service{
+	s := &Service{
 		scope:     networkScope,
 		EC2Client: scope.NewEC2Client(networkScope, networkScope, networkScope, networkScope.InfraCluster()),
 	}
+	s.eip = eip.NewServiceWithNetworkScope(s.scope, s.EC2Client)
+	return s
 }

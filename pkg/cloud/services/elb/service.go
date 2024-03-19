@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi/resourcegroupstaggingapiiface"
 
 	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/scope"
+	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/services/network/eip"
 )
 
 // Service holds a collection of interfaces.
@@ -31,6 +32,7 @@ import (
 // One alternative is to have a large list of functions from the ec2 client.
 type Service struct {
 	scope                 scope.ELBScope
+	eip                   *eip.Service
 	EC2Client             ec2iface.EC2API
 	ELBClient             elbiface.ELBAPI
 	ELBV2Client           elbv2iface.ELBV2API
@@ -39,11 +41,13 @@ type Service struct {
 
 // NewService returns a new service given the api clients.
 func NewService(elbScope scope.ELBScope) *Service {
-	return &Service{
+	s := &Service{
 		scope:                 elbScope,
 		EC2Client:             scope.NewEC2Client(elbScope, elbScope, elbScope, elbScope.InfraCluster()),
 		ELBClient:             scope.NewELBClient(elbScope, elbScope, elbScope, elbScope.InfraCluster()),
 		ELBV2Client:           scope.NewELBv2Client(elbScope, elbScope, elbScope, elbScope.InfraCluster()),
 		ResourceTaggingClient: scope.NewResourgeTaggingClient(elbScope, elbScope, elbScope, elbScope.InfraCluster()),
 	}
+	s.eip = eip.NewServiceWithELBScope(s.scope, s.EC2Client)
+	return s
 }

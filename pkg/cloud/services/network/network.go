@@ -148,7 +148,7 @@ func (s *Service) DeleteNetwork() (err error) {
 	conditions.MarkFalse(s.scope.InfraCluster(), infrav1.NatGatewaysReadyCondition, clusterv1.DeletedReason, clusterv1.ConditionSeverityInfo, "")
 
 	// EIPs.
-	if err := s.releaseAddresses(); err != nil {
+	if err := s.eip.ReleaseAddresses(); err != nil {
 		return err
 	}
 
