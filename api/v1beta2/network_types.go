@@ -20,6 +20,10 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -37,6 +41,11 @@ const (
 	DefaultAPIServerHealthThresholdCount = 5
 	// DefaultAPIServerUnhealthThresholdCount the API server unhealthy check threshold count.
 	DefaultAPIServerUnhealthThresholdCount = 3
+
+	// ZoneTypeAvailabilityZone defines the regular AWS zones in the Region.
+	ZoneTypeAvailabilityZone = "availability-zone"
+	// ZoneTypeLocalZone defines the AWS zone type in Local Zone infrastructure.
+	ZoneTypeLocalZone = "local-zone"
 )
 
 // NetworkStatus encapsulates AWS networking resources.
@@ -430,6 +439,26 @@ type SubnetSpec struct {
 
 	// Tags is a collection of tags describing the resource.
 	Tags Tags `json:"tags,omitempty"`
+
+	// ZoneType defines a zone type for this subnet.
+	//
+	// The valid values are availability-zone, and local-zone.
+	//
+	// Zone types local-zone is not selected to automatically create
+	// resources like Nat Gateway, Network Load Balancers, control plane or compute nodes.
+	//
+	// When local-zone, the public subnets will be associated with the public route table,
+	// the private subnets use the zone in the region to create route tables re-using
+	// NAT Gateways (preferred from the parent zone, the zone type availability-zone in the region,
+	// or first table available).
+	//
+	// +kubebuilder:validation:Enum=availability-zone;local-zone
+	// +optional
+	ZoneType *ZoneType `json:"zoneType,omitempty"`
+
+	// ParentZoneName defines a parent zone name of the zone that the subnet is created.
+	// +optional
+	ParentZoneName *string `json:"parentZoneName,omitempty"`
 }
 
 // GetResourceID returns the identifier for this subnet,
@@ -444,6 +473,45 @@ func (s *SubnetSpec) GetResourceID() string {
 // String returns a string representation of the subnet.
 func (s *SubnetSpec) String() string {
 	return fmt.Sprintf("id=%s/az=%s/public=%v", s.GetResourceID(), s.AvailabilityZone, s.IsPublic)
+}
+
+// IsEdge returns the true when the subnet is created in the edge zone,
+// Local Zones.
+func (s *SubnetSpec) IsEdge() bool {
+	if s.ZoneType == nil {
+		return false
+	}
+	if s.ZoneType.Equal(ZoneType(ZoneTypeLocalZone)) {
+		return true
+	}
+	return false
+}
+
+// SetZoneInfo updates the subnets with zone information.
+func (s *SubnetSpec) SetZoneInfo(zones []*ec2.AvailabilityZone) error {
+	zoneInfo := func(zoneName string) *ec2.AvailabilityZone {
+		for _, zone := range zones {
+			if aws.StringValue(zone.ZoneName) == zoneName {
+				return zone
+			}
+		}
+		return nil
+	}
+
+	zone := zoneInfo(s.AvailabilityZone)
+	if zone == nil {
+		if len(s.AvailabilityZone) > 0 {
+			return fmt.Errorf("unable to update zone information for subnet '%v' and zone '%v'", s.ID, s.AvailabilityZone)
+		}
+		return fmt.Errorf("unable to update zone information for subnet '%v'", s.ID)
+	}
+	if zone.ZoneType != nil {
+		s.ZoneType = ptr.To(ZoneType(*zone.ZoneType))
+	}
+	if zone.ParentZoneName != nil {
+		s.ParentZoneName = zone.ParentZoneName
+	}
+	return nil
 }
 
 // Subnets is a slice of Subnet.
@@ -463,6 +531,22 @@ func (s Subnets) ToMap() map[string]*SubnetSpec {
 
 // IDs returns a slice of the subnet ids.
 func (s Subnets) IDs() []string {
+	res := []string{}
+	for _, subnet := range s {
+		// Prevent returning edge zones (Local Zone) to regular Subnet IDs.
+		// Edge zones should not deploy control plane nodes, and does not support Nat Gateway and
+		// Network Load Balancers. Any resource for the core infrastructure should not consume edge
+		// zones.
+		if subnet.IsEdge() {
+			continue
+		}
+		res = append(res, subnet.GetResourceID())
+	}
+	return res
+}
+
+// IDsWithEdge returns a slice of the subnet ids.
+func (s Subnets) IDsWithEdge() []string {
 	res := []string{}
 	for _, subnet := range s {
 		res = append(res, subnet.GetResourceID())
@@ -501,33 +585,44 @@ func (s Subnets) FindEqual(spec *SubnetSpec) *SubnetSpec {
 }
 
 // FilterPrivate returns a slice containing all subnets marked as private.
-func (s Subnets) FilterPrivate() (res Subnets) {
+func (s Subnets) FilterPrivate() Subnets {
+	res := Subnets{}
 	for _, x := range s {
+		// Subnets in AWS Local Zones or Wavelength should not be used by core infrastructure.
+		if x.IsEdge() {
+			continue
+		}
 		if !x.IsPublic {
 			res = append(res, x)
 		}
 	}
-	return
+	return res
 }
 
 // FilterPublic returns a slice containing all subnets marked as public.
-func (s Subnets) FilterPublic() (res Subnets) {
+func (s Subnets) FilterPublic() Subnets {
+	res := Subnets{}
 	for _, x := range s {
+		// Subnets in AWS Local Zones or Wavelength should not be used by core infrastructure.
+		if x.IsEdge() {
+			continue
+		}
 		if x.IsPublic {
 			res = append(res, x)
 		}
 	}
-	return
+	return res
 }
 
 // FilterByZone returns a slice containing all subnets that live in the availability zone specified.
-func (s Subnets) FilterByZone(zone string) (res Subnets) {
+func (s Subnets) FilterByZone(zone string) Subnets {
+	res := Subnets{}
 	for _, x := range s {
 		if x.AvailabilityZone == zone {
 			res = append(res, x)
 		}
 	}
-	return
+	return res
 }
 
 // GetUniqueZones returns a slice containing the unique zones of the subnets.
@@ -535,12 +630,23 @@ func (s Subnets) GetUniqueZones() []string {
 	keys := make(map[string]bool)
 	zones := []string{}
 	for _, x := range s {
-		if _, value := keys[x.AvailabilityZone]; !value {
+		if _, value := keys[x.AvailabilityZone]; len(x.AvailabilityZone) > 0 && !value {
 			keys[x.AvailabilityZone] = true
 			zones = append(zones, x.AvailabilityZone)
 		}
 	}
 	return zones
+}
+
+// SetZoneInfo updates the subnets with zone information.
+func (s Subnets) SetZoneInfo(zones []*ec2.AvailabilityZone) error {
+	for i := range s {
+		err := s[i].SetZoneInfo(zones)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CNISpec defines configuration for CNI.
@@ -756,4 +862,17 @@ func (i *IngressRule) Equals(o *IngressRule) bool {
 	}
 
 	return true
+}
+
+// ZoneType defines listener AWS Availability Zone type.
+type ZoneType string
+
+// String returns the string representation for the zone type.
+func (z ZoneType) String() string {
+	return string(z)
+}
+
+// Equal compares two zone types.
+func (z ZoneType) Equal(other ZoneType) bool {
+	return z == other
 }
