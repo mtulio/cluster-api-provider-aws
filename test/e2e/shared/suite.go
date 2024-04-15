@@ -229,6 +229,13 @@ func AllNodesBeforeSuite(e2eCtx *E2EContext, data []byte) {
 	azs := GetAvailabilityZones(e2eCtx.AWSSession)
 	SetEnvVar(AwsAvailabilityZone1, *azs[0].ZoneName, false)
 	SetEnvVar(AwsAvailabilityZone2, *azs[1].ZoneName, false)
+	localzone, err := GetLocalZoneWithOptIn(e2eCtx.AWSSession)
+	if err != nil {
+		fmt.Printf("unable to get Local Zone: %s\n", err)
+	}
+	if localzone != nil {
+		SetEnvVar(AwsLocalZone1, *localzone.ZoneName, false)
+	}
 	SetEnvVar("AWS_REGION", conf.Region, false)
 	SetEnvVar("AWS_SSH_KEY_NAME", DefaultSSHKeyPairName, false)
 	SetEnvVar("AWS_B64ENCODED_CREDENTIALS", conf.Base64EncodedCredentials, true)

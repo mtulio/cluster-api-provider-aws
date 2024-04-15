@@ -872,8 +872,55 @@ func conformanceImageID(e2eCtx *E2EContext) string {
 }
 
 func GetAvailabilityZones(sess client.ConfigProvider) []*ec2.AvailabilityZone {
+	return GetAvailabilityZonesByType(sess, []string{"availability-zone"}, false)
+}
+
+func getLocalZones(sess client.ConfigProvider) []*ec2.AvailabilityZone {
+	return GetAvailabilityZonesByType(sess, []string{"local-zone"}, true)
+}
+
+func GetLocalZoneWithOptIn(sess client.ConfigProvider) (*ec2.AvailabilityZone, error) {
+	zones := getLocalZones(sess)
+	if len(zones) == 0 {
+		return nil, fmt.Errorf("unable to find Local Zones")
+	}
+	localzone := zones[0]
+	if *localzone.OptInStatus == "opted-in" {
+		return localzone, nil
+	}
+	err := optIntoZoneGroup(sess, localzone.OptInStatus)
+	Expect(err).NotTo(HaveOccurred())
+	return localzone, nil
+}
+
+func optIntoZoneGroup(sess client.ConfigProvider, group *string) error {
 	ec2Client := ec2.New(sess)
-	azs, err := ec2Client.DescribeAvailabilityZonesWithContext(context.TODO(), nil)
+	out, err := ec2Client.ModifyAvailabilityZoneGroup(&ec2.ModifyAvailabilityZoneGroupInput{
+		GroupName:   group,
+		OptInStatus: aws.String("opted-in"),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	if !*out.Return {
+		return fmt.Errorf("unable to opt-int zone group %v", *group)
+	}
+	// zones takes some time to be enabled, there are two options: query zone or wait.
+	// TODO(mtulio): create a wait for opt-in query for a zone.
+	time.Sleep(30 * time.Second)
+	return nil
+}
+
+func GetAvailabilityZonesByType(sess client.ConfigProvider, zoneTypes []string, allZones bool) []*ec2.AvailabilityZone {
+	ec2Client := ec2.New(sess)
+	azs, err := ec2Client.DescribeAvailabilityZonesWithContext(context.TODO(), &ec2.DescribeAvailabilityZonesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("zone-type"),
+				Values: aws.StringSlice(zoneTypes),
+			},
+		},
+		AllAvailabilityZones: aws.Bool(allZones),
+	})
 	Expect(err).NotTo(HaveOccurred())
 	return azs.AvailabilityZones
 }

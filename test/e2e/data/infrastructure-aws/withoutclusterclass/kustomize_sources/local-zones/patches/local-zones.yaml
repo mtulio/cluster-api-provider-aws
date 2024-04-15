@@ -1,0 +1,37 @@
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: AWSCluster
+metadata:
+  name: "${CLUSTER_NAME}"
+spec:
+  region: "${AWS_REGION}"
+  networkSpec:
+    vpc:
+      cidrBlock: "10.0.0.0/20"
+    subnets:
+    # regular zones (availability zones)
+    - availabilityZone: "${AWS_AVAILABILITY_ZONE_1}"
+      cidrBlock: "10.0.0.0/24"
+      id: "cluster-subnet-private-${AWS_AVAILABILITY_ZONE_1}"
+      isPublic: false
+    - availabilityZone: "${AWS_AVAILABILITY_ZONE_1}"
+      cidrBlock: "10.0.1.0/24"
+      id: "cluster-subnet-public-${AWS_AVAILABILITY_ZONE_1}"
+      isPublic: true
+    - availabilityZone: "${AWS_AVAILABILITY_ZONE_2}"
+      cidrBlock: "10.0.3.0/24"
+      id: "cluster-subnet-private-${AWS_AVAILABILITY_ZONE_2}"
+      isPublic: false
+    - availabilityZone: "${AWS_AVAILABILITY_ZONE_2}"
+      cidrBlock: "10.0.4.0/24"
+      id: "cluster-subnet-public-${AWS_AVAILABILITY_ZONE_2}"
+      isPublic: true
+    # Subnets in Local Zones of New York location (public and private)
+    - availabilityZone: "${AWS_LOCAL_ZONE_1}"
+      cidrBlock: "10.0.128.0/25"
+      id: "cluster-subnet-private-${AWS_LOCAL_ZONE_1}"
+      isPublic: false
+    - availabilityZone: "${AWS_LOCAL_ZONE_1}"
+      cidrBlock: "10.0.128.128/25"
+      id: "cluster-subnet-public-${AWS_LOCAL_ZONE_1}"
+      isPublic: true
