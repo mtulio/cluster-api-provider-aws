@@ -25,7 +25,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/pkg/errors"
-	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/v2/api/v1beta2"
 	"sigs.k8s.io/cluster-api-provider-aws/v2/pkg/cloud/awserrors"
@@ -84,7 +83,7 @@ func (s *Service) ReconcileBastion() error {
 			return err
 		}
 		// TODO(mtulio): add support of BYO IP for bastion
-		instance, err = s.runInstance("bastion", defaultBastion, ptr.Deref(defaultBastion.PublicIPOnLaunch, false))
+		instance, err = s.runInstance("bastion", defaultBastion)
 		if err != nil {
 			record.Warnf(s.scope.InfraCluster(), "FailedCreateBastion", "Failed to create bastion instance: %v", err)
 			return err

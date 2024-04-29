@@ -81,6 +81,8 @@ type EC2Interface interface {
 	LaunchTemplateNeedsUpdate(scope scope.LaunchTemplateScope, incoming *expinfrav1.AWSLaunchTemplate, existing *expinfrav1.AWSLaunchTemplate) (bool, error)
 	DeleteBastion() error
 	ReconcileBastion() error
+	ReconcileElasticIpFromPublicPool(instance *infrav1.Instance) error
+	ReleaseElasticIp(instanceId string) error
 }
 
 // MachinePoolReconcileInterface encapsulates high-level reconciliation functions regarding EC2 reconciliation. It is

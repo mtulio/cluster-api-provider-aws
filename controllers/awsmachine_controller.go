@@ -409,6 +409,14 @@ func (r *AWSMachineReconciler) reconcileDelete(machineScope *scope.MachineScope,
 			conditions.MarkFalse(machineScope.AWSMachine, infrav1.SecurityGroupsReadyCondition, clusterv1.DeletedReason, clusterv1.ConditionSeverityInfo, "")
 		}
 
+		// If the machine has public IP Address (EIP) with a BYO IP Pool, release it.
+		if r.hasPublicIpv4Pool(machineScope, ec2Scope) {
+			if err := ec2Service.ReleaseElasticIp(instance.ID); err != nil {
+				machineScope.Error(err, "failed to release elastic IP address")
+				return ctrl.Result{}, err
+			}
+		}
+
 		machineScope.Info("EC2 instance successfully terminated", "instance-id", instance.ID)
 		r.Recorder.Eventf(machineScope.AWSMachine, corev1.EventTypeNormal, "SuccessfulTerminate", "Terminated instance %q", instance.ID)
 
@@ -522,6 +530,18 @@ func (r *AWSMachineReconciler) reconcileNormal(_ context.Context, machineScope *
 			return ctrl.Result{}, err
 		}
 	}
+
+	// TODO assgin custom EIP (BYO IP)
+	// feature BYO IP: machines with PublicIP and Public IPv4 Pool set, should create
+	// and attach an EIP+Public Pool when the machine transictioned out from Pending state.
+	// If the machine has public IP Address (EIP) with a BYO IP Pool, release it.
+	if r.hasPublicIpv4Pool(machineScope, ec2Scope) {
+		if err := ec2svc.ReconcileElasticIpFromPublicPool(instance); err != nil {
+			machineScope.Error(err, "failed to associate elastic IP address")
+			return ctrl.Result{}, err
+		}
+	}
+
 	if feature.Gates.Enabled(feature.EventBridgeInstanceState) {
 		instancestateSvc := instancestate.NewService(ec2Scope)
 		if err := instancestateSvc.AddInstanceToEventPattern(instance.ID); err != nil {
@@ -1229,4 +1249,8 @@ func (r *AWSMachineReconciler) ensureInstanceMetadataOptions(ec2svc services.EC2
 	}
 
 	return ec2svc.ModifyInstanceMetadataOptions(instance.ID, machine.Spec.InstanceMetadataOptions)
+}
+
+func (r *AWSMachineReconciler) hasPublicIpv4Pool(machineScope *scope.MachineScope, sc scope.EC2Scope) bool {
+	return ptr.Deref(machineScope.AWSMachine.Spec.PublicIP, false) && sc.VPC().PublicIpv4Pool != nil
 }

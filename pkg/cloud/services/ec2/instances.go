@@ -182,20 +182,7 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 	}
 	input.SubnetID = subnetID
 
-	if ptr.Deref(scope.AWSMachine.Spec.PublicIP, false) {
-		subnets, err := s.getFilteredSubnets(&ec2.Filter{
-			Name:   aws.String("subnet-id"),
-			Values: aws.StringSlice([]string{subnetID}),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("could not query if subnet has MapPublicIpOnLaunch set: %w", err)
-		}
-		if len(subnets) == 0 {
-			return nil, fmt.Errorf("expected to find subnet %q", subnetID)
-		}
-		// If the subnet does not assign public IPs, set that option in the instance's network interface
-		input.PublicIPOnLaunch = ptr.To(!aws.BoolValue(subnets[0].MapPublicIpOnLaunch))
-	}
+	input.PublicIPOnLaunch = ptr.To(ptr.Deref(scope.AWSMachine.Spec.PublicIP, false))
 
 	if !scope.IsControlPlaneExternallyManaged() && !scope.IsExternallyManaged() && !scope.IsEKSManaged() && s.scope.Network().APIServerELB.DNSName == "" {
 		record.Eventf(s.scope.InfraCluster(), "FailedCreateInstance", "Failed to run controlplane, APIServer ELB not available")
@@ -256,19 +243,9 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 
 	input.PrivateDNSName = scope.AWSMachine.Spec.PrivateDNSName
 
-	isPublicConfig := ptr.Deref(input.PublicIPOnLaunch, false)
-	mapPublicIPOnLaunch := isPublicConfig
-	// forces to not create associate public IPv4 when launching instances
-	// when a IPv4 Pool is set on cluster scope, preventing duplicated EIP
-	// allocation. The EIP from the pool is associated to the instance after
-	// launch when PublicIPOnLaunch is set.
-	if isPublicConfig && s.scope.VPC().PublicIpv4Pool != nil {
-		mapPublicIPOnLaunch = false
-	}
-
 	s.scope.Debug("Running instance", "machine-role", scope.Role())
 	s.scope.Debug("Running instance with instance metadata options", "metadata options", input.InstanceMetadataOptions)
-	out, err := s.runInstance(scope.Role(), input, mapPublicIPOnLaunch)
+	out, err := s.runInstance(scope.Role(), input)
 	if err != nil {
 		// Only record the failure event if the error is not related to failed dependencies.
 		// This is to avoid spamming failure events since the machine will be requeued by the actuator.
@@ -283,12 +260,17 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 	scope.SetInstanceID(out.ID)
 
 	// Attaching EIPs to instance when BYO IPv4 is set.
-	if isPublicConfig && s.scope.VPC().PublicIpv4Pool != nil {
-		err := s.eip.GetAndAssociateAddressesToInstance(1, fmt.Sprintf("ec2-%s", out.ID), out.ID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to allocate EIP from Custom Public IPv4 Pool: %v", s.scope.VPC().PublicIpv4Pool)
-		}
-	}
+	// fmt.Printf("\n\n SLEEPING \n\n")
+	// time.Sleep(5 * time.Second)
+	// fmt.Printf("\n\n INSTANCE DEBUG 1 \n\n")
+	// if ptr.Deref(input.PublicIPOnLaunch, false) && (s.scope.VPC().PublicIpv4Pool != nil) {
+	// 	fmt.Printf("\n\n INSTANCE DEBUG 2 \n\n")
+	// 	if err := s.eip.GetAndAssociateAddressesToInstance(1, fmt.Sprintf("ec2-%s", out.ID), out.ID); err != nil {
+	// 		fmt.Printf("\n\n ASSOCIATE ERR %v \n\n", err)
+	// 		return nil, errors.Wrapf(err, "failed to allocate EIP from Custom Public IPv4 Pool: %v", s.scope.VPC().PublicIpv4Pool)
+	// 	}
+	// }
+	// fmt.Printf("\n\n INSTANCE DEBUG X \n\n")
 
 	if len(input.NetworkInterfaces) > 0 {
 		for _, id := range input.NetworkInterfaces {
@@ -552,7 +534,7 @@ func (s *Service) TerminateInstanceAndWait(instanceID string) error {
 	return nil
 }
 
-func (s *Service) runInstance(role string, i *infrav1.Instance, mapPublicIP bool) (*infrav1.Instance, error) {
+func (s *Service) runInstance(role string, i *infrav1.Instance) (*infrav1.Instance, error) {
 	input := &ec2.RunInstancesInput{
 		InstanceType: aws.String(i.Type),
 		ImageId:      aws.String(i.ImageID),
@@ -562,6 +544,16 @@ func (s *Service) runInstance(role string, i *infrav1.Instance, mapPublicIP bool
 		MinCount:     aws.Int64(1),
 		UserData:     i.UserData,
 	}
+
+	// Public IP address from BYO IPv4 need to be associated pos-launch.
+	// To prevent duplicated public IP, the map on launch should be expkicity
+	// disabled in instances with PublicIP set on config.
+	mapPublicIPOnLaunch := ptr.Deref(i.PublicIPOnLaunch, false)
+	if s.scope.VPC().PublicIpv4Pool != nil {
+		mapPublicIPOnLaunch = false
+	}
+
+	fmt.Printf("\n\nmapPublicIPOnLaunch => %v\n\n", mapPublicIPOnLaunch)
 
 	s.scope.Debug("userData size", "bytes", len(*i.UserData), "role", role)
 
@@ -574,17 +566,17 @@ func (s *Service) runInstance(role string, i *infrav1.Instance, mapPublicIP bool
 				DeviceIndex:        aws.Int64(int64(index)),
 			})
 		}
-		netInterfaces[0].AssociatePublicIpAddress = aws.Bool(mapPublicIP)
+		netInterfaces[0].AssociatePublicIpAddress = aws.Bool(mapPublicIPOnLaunch)
 
 		input.NetworkInterfaces = netInterfaces
 	} else {
-		if mapPublicIP {
+		if mapPublicIPOnLaunch {
 			input.NetworkInterfaces = []*ec2.InstanceNetworkInterfaceSpecification{
 				{
 					DeviceIndex:              aws.Int64(0),
 					SubnetId:                 aws.String(i.SubnetID),
 					Groups:                   aws.StringSlice(i.SecurityGroupIDs),
-					AssociatePublicIpAddress: aws.Bool(mapPublicIP),
+					AssociatePublicIpAddress: aws.Bool(mapPublicIPOnLaunch),
 				},
 			}
 		} else {

@@ -121,7 +121,7 @@ func (s *Service) AdditionalTags() map[string]string {
 func (s *Service) Debug(msg string, keysAndValues ...any) {
 	// switch s.currentScope {
 	// case eipScopeNetwork:
-	// 	// s.scopeNetwork.Debug(msg, keysAndValues)
+	// 	s.scopeNetwork.Debug(msg, keysAndValues)
 	// 	fmt.Printf("\n DEBUG TMP: %v => %v", msg, keysAndValues)
 	// case eipScopeEC2:
 	// 	s.scopeEC2.Debug(msg, keysAndValues)
