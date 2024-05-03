@@ -2308,6 +2308,7 @@ func autoConvert_v1beta2_VPCSpec_To_v1beta1_VPCSpec(in *v1beta2.VPCSpec, out *VP
 	}
 	out.InternetGatewayID = (*string)(unsafe.Pointer(in.InternetGatewayID))
 	// WARNING: in.CarrierGatewayID requires manual conversion: does not exist in peer-type
+	// WARNING: in.ElasticIPPool requires manual conversion: does not exist in peer-type
 	out.Tags = *(*Tags)(unsafe.Pointer(&in.Tags))
 	out.AvailabilityZoneUsageLimit = (*int)(unsafe.Pointer(in.AvailabilityZoneUsageLimit))
 	out.AvailabilityZoneSelection = (*AZSelectionScheme)(unsafe.Pointer(in.AvailabilityZoneSelection))

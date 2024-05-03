@@ -105,6 +105,10 @@ func (src *AWSCluster) ConvertTo(dstRaw conversion.Hub) error {
 	dst.Spec.NetworkSpec.VPC.PrivateDNSHostnameTypeOnLaunch = restored.Spec.NetworkSpec.VPC.PrivateDNSHostnameTypeOnLaunch
 	dst.Spec.NetworkSpec.VPC.CarrierGatewayID = restored.Spec.NetworkSpec.VPC.CarrierGatewayID
 
+	if restored.Spec.NetworkSpec.VPC.ElasticIPPool != nil {
+		dst.Spec.NetworkSpec.VPC.ElasticIPPool = restored.Spec.NetworkSpec.VPC.ElasticIPPool
+	}
+
 	// Restore SubnetSpec.ResourceID, SubnetSpec.ParentZoneName, and SubnetSpec.ZoneType fields, if any.
 	for _, subnet := range restored.Spec.NetworkSpec.Subnets {
 		for i, dstSubnet := range dst.Spec.NetworkSpec.Subnets {

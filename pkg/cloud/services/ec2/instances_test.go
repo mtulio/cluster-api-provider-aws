@@ -2141,7 +2141,7 @@ func TestCreateInstance(t *testing.T) {
 							AvailabilityZone:    aws.String("us-east-1b"),
 							MapPublicIpOnLaunch: aws.Bool(true),
 						}},
-					}, nil)
+					}, nil).MaxTimes(2)
 				m.
 					DescribeInstanceTypesWithContext(context.TODO(), gomock.Eq(&ec2.DescribeInstanceTypesInput{
 						InstanceTypes: []*string{
@@ -2283,7 +2283,7 @@ func TestCreateInstance(t *testing.T) {
 							AvailabilityZone:    aws.String("us-east-1b"),
 							MapPublicIpOnLaunch: aws.Bool(false),
 						}},
-					}, nil)
+					}, nil).MaxTimes(2)
 				m.
 					DescribeInstanceTypesWithContext(context.TODO(), gomock.Eq(&ec2.DescribeInstanceTypesInput{
 						InstanceTypes: []*string{
@@ -2561,7 +2561,7 @@ func TestCreateInstance(t *testing.T) {
 							SubnetId:            aws.String("public-subnet-1"),
 							MapPublicIpOnLaunch: aws.Bool(true),
 						}},
-					}, nil)
+					}, nil).MaxTimes(2)
 				m.
 					RunInstancesWithContext(context.TODO(), gomock.Any()).
 					Return(&ec2.Reservation{
@@ -2710,7 +2710,7 @@ func TestCreateInstance(t *testing.T) {
 							SubnetId:            aws.String("public-subnet-1"),
 							MapPublicIpOnLaunch: aws.Bool(false),
 						}},
-					}, nil)
+					}, nil).MaxTimes(2)
 				m.
 					RunInstancesWithContext(context.TODO(), gomock.Any()).
 					Do(func(_ context.Context, in *ec2.RunInstancesInput, _ ...request.Option) {
@@ -2854,7 +2854,7 @@ func TestCreateInstance(t *testing.T) {
 							SubnetId:            aws.String("public-subnet-1"),
 							MapPublicIpOnLaunch: aws.Bool(true),
 						}},
-					}, nil)
+					}, nil).MaxTimes(2)
 				m.
 					RunInstancesWithContext(context.TODO(), gomock.Any()).
 					Return(&ec2.Reservation{
@@ -2984,7 +2984,7 @@ func TestCreateInstance(t *testing.T) {
 							SubnetId:            aws.String("public-subnet-1"),
 							MapPublicIpOnLaunch: aws.Bool(false),
 						}},
-					}, nil)
+					}, nil).MaxTimes(2)
 				m.
 					RunInstancesWithContext(context.TODO(), gomock.Any()).
 					Do(func(_ context.Context, in *ec2.RunInstancesInput, _ ...request.Option) {

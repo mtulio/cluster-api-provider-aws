@@ -409,6 +409,15 @@ func (r *AWSMachineReconciler) reconcileDelete(machineScope *scope.MachineScope,
 			conditions.MarkFalse(machineScope.AWSMachine, infrav1.SecurityGroupsReadyCondition, clusterv1.DeletedReason, clusterv1.ConditionSeverityInfo, "")
 		}
 
+		// Release an EIP when the machine has public IP Address (EIP) with a cluster-wide config
+		// to consume from BYO IPv4 Pool.
+		if r.hasPublicIpv4Pool(machineScope, ec2Scope) {
+			if err := ec2Service.ReleaseElasticIP(instance.ID); err != nil {
+				machineScope.Error(err, "failed to release elastic IP address")
+				return ctrl.Result{}, err
+			}
+		}
+
 		machineScope.Info("EC2 instance successfully terminated", "instance-id", instance.ID)
 		r.Recorder.Eventf(machineScope.AWSMachine, corev1.EventTypeNormal, "SuccessfulTerminate", "Terminated instance %q", instance.ID)
 
@@ -522,6 +531,18 @@ func (r *AWSMachineReconciler) reconcileNormal(_ context.Context, machineScope *
 			return ctrl.Result{}, err
 		}
 	}
+
+	// BYO Public IPv4 Pool: Allocate and associate an EIP to machines with PublicIP and
+	// cluster-wide Public IPv4 Pool configuration. The EIP must be associated after the instance
+	// is created and transictioned from Pending state.
+	// If the instance already have n public IPv4 address (EIP) associated, it will be released.
+	if r.hasPublicIpv4Pool(machineScope, ec2Scope) {
+		if err := ec2svc.ReconcileElasticIPFromPublicPool(instance); err != nil {
+			machineScope.Error(err, "failed to associate elastic IP address")
+			return ctrl.Result{}, err
+		}
+	}
+
 	if feature.Gates.Enabled(feature.EventBridgeInstanceState) {
 		instancestateSvc := instancestate.NewService(ec2Scope)
 		if err := instancestateSvc.AddInstanceToEventPattern(instance.ID); err != nil {
@@ -1229,4 +1250,15 @@ func (r *AWSMachineReconciler) ensureInstanceMetadataOptions(ec2svc services.EC2
 	}
 
 	return ec2svc.ModifyInstanceMetadataOptions(instance.ID, machine.Spec.InstanceMetadataOptions)
+}
+
+func (r *AWSMachineReconciler) hasPublicIpv4Pool(machineScope *scope.MachineScope, sc scope.EC2Scope) bool {
+	if sc.VPC().GetPublicIpv4Pool() != nil {
+		return false
+	}
+	if ptr.Deref(machineScope.AWSMachine.Spec.PublicIP, false) {
+		return false
+	}
+	// TODO(mtulio): check if should skip instances with IPv6
+	return true
 }

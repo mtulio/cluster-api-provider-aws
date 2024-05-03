@@ -1564,6 +1564,39 @@ spec:
                           Defaults to 10.0.0.0/16.
                           Mutually exclusive with IPAMPool.
                         type: string
+                      elasticIpPool:
+                        description: ElasticIPPool is the configuration to allocate
+                          Public IPv4 address (Elastic IP/EIP) from user-defined pools.
+                        properties:
+                          publicIpv4Pool:
+                            description: |-
+                              PublicIpv4Pool defines the Public IPv4 Pool to be used for VPC resources created
+                              in public subnets.
+                            maxLength: 30
+                            type: string
+                            x-kubernetes-validations:
+                            - message: publicIpv4Pool must start with 'ipv4pool-ec2-'
+                              rule: self.startsWith('ipv4pool-ec2-')
+                          publicIpv4PoolFallbackOrder:
+                            description: |-
+                              PublicIpv4PoolFallBackOrder defines the fallback when the Public IPv4 Pool has been exhausted,
+                              no more IPv4 address available in the pool.
+
+
+                              When amazon-provided, and the PublicIpv4Pool is set, the controller check if the pool has available IPv4,
+                              and if not it fallback to Amazon pool.
+
+
+                              When 'none' it will not use any fallback strategy and will fail to provision when the fallback
+                              is trigeredin public subnets.
+                            enum:
+                            - amazon-provided
+                            - none
+                            type: string
+                            x-kubernetes-validations:
+                            - message: allowed values are 'none' and 'amazon-pool'
+                              rule: self in ['none','amazon-pool']
+                        type: object
                       emptyRoutesDefaultVPCSecurityGroup:
                         description: |-
                           EmptyRoutesDefaultVPCSecurityGroup specifies whether the default VPC security group ingress

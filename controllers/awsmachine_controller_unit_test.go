@@ -373,6 +373,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 					getInstanceSecurityGroups(t, g)
 
 					secretSvc.EXPECT().UserData(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(ms.AWSMachine.Spec.ProviderID).To(PointTo(Equal(providerID)))
 				})
@@ -386,6 +388,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 					getInstanceSecurityGroups(t, g)
 
 					secretSvc.EXPECT().UserData(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 					instance.State = infrav1.InstanceStatePending
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 
@@ -406,6 +410,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 					getInstanceSecurityGroups(t, g)
 
 					secretSvc.EXPECT().UserData(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 					instance.State = infrav1.InstanceStateRunning
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 
@@ -427,9 +433,12 @@ func TestAWSMachineReconciler(t *testing.T) {
 				buf := new(bytes.Buffer)
 				klog.SetOutput(buf)
 				instance.State = "NewAWSMachineState"
+
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				secretSvc.EXPECT().UserData(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 				secretSvc.EXPECT().Create(gomock.Any(), gomock.Any()).Return("test", int32(1), nil).Times(1)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				g.Expect(ms.AWSMachine.Status.Ready).To(BeFalse())
 				g.Expect(buf.String()).To(ContainSubstring("EC2 instance state is undefined"))
@@ -462,6 +471,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					}
 					ec2Svc.EXPECT().UpdateInstanceSecurityGroups(instance.ID, []string{"sg-2345"})
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return([]string{"sg-2345"}, nil)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					expectConditions(g, ms.AWSMachine, []conditionAssertion{{conditionType: infrav1.SecurityGroupsReadyCondition, status: corev1.ConditionTrue}})
@@ -477,6 +487,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
 					ec2Svc.EXPECT().UpdateInstanceSecurityGroups(gomock.Any(), gomock.Any()).Times(0)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 					if _, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs); err != nil {
 						_ = fmt.Errorf("reconcileNormal reutrned an error during test")
 					}
@@ -517,6 +528,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 						},
 						map[string]string{},
 					).Return(nil).Times(2)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).To(BeNil())
@@ -540,6 +552,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 						},
 						map[string]string{},
 					).Return(nil).Times(3)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).To(BeNil())
@@ -568,6 +581,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					defer teardown(t, g)
 					instanceCreate(t, g)
 					getCoreSecurityGroups(t, g)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					instance.State = infrav1.InstanceStateStopping
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
@@ -584,6 +598,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					defer teardown(t, g)
 					instanceCreate(t, g)
 					getCoreSecurityGroups(t, g)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					instance.State = infrav1.InstanceStateStopped
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
@@ -600,6 +615,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					defer teardown(t, g)
 					instanceCreate(t, g)
 					getCoreSecurityGroups(t, g)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					instance.State = infrav1.InstanceStateRunning
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
@@ -627,6 +643,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 					defer teardown(t, g)
 					instanceCreate(t, g)
 					deleteMachine(t, g)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 					instance.State = infrav1.InstanceStateShuttingDown
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(ms.AWSMachine.Status.Ready).To(BeFalse())
@@ -641,6 +659,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					defer teardown(t, g)
 					instanceCreate(t, g)
 					deleteMachine(t, g)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					instance.State = infrav1.InstanceStateTerminated
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
@@ -670,6 +689,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ec2Svc.EXPECT().GetInstanceSecurityGroups(gomock.Any()).Return(map[string][]string{"eid": {}}, nil).Times(1)
 				ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 				ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				g.Expect(err).To(BeNil())
@@ -696,6 +716,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ec2Svc.EXPECT().GetInstanceSecurityGroups(gomock.Any()).Return(map[string][]string{"eid": {}}, nil).Times(1)
 				ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 				ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				g.Expect(err).To(BeNil())
@@ -718,6 +739,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				reconciler.elbServiceFactory = func(elbScope scope.ELBScope) services.ELBInterface {
 					return elbSvc
 				}
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				g.Expect(err).To(BeNil())
@@ -738,6 +760,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				secretSvc.EXPECT().UserData(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 				secretSvc.EXPECT().Create(gomock.Any(), gomock.Any()).Return("test", int32(1), nil).Times(1)
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(errors.New("failed to delete entries from AWS Secret")).Times(1)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				expectConditions(g, ms.AWSMachine, []conditionAssertion{{infrav1.InstanceReadyCondition, corev1.ConditionFalse, clusterv1.ConditionSeverityWarning, infrav1.InstanceNotReadyReason}})
@@ -788,6 +811,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				ec2Svc.EXPECT().CreateInstance(gomock.Any(), gomock.Any(), gomock.Any()).Return(instance, nil)
 				ec2Svc.EXPECT().GetRunningInstanceByTags(gomock.Any()).Return(nil, nil)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 				elbSvc.EXPECT().IsInstanceRegisteredWithAPIServerELB(gomock.Any()).Return(false, errors.New("error describing ELB"))
 				secretSvc.EXPECT().UserData(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 				secretSvc.EXPECT().Create(gomock.Any(), gomock.Any()).Return("test", int32(1), nil).Times(1)
@@ -814,6 +838,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				ec2Svc.EXPECT().CreateInstance(gomock.Any(), gomock.Any(), gomock.Any()).Return(instance, nil)
 				ec2Svc.EXPECT().GetRunningInstanceByTags(gomock.Any()).Return(nil, nil)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 				elbSvc.EXPECT().IsInstanceRegisteredWithAPIServerELB(gomock.Any()).Return(false, nil)
 				elbSvc.EXPECT().RegisterInstanceWithAPIServerELB(gomock.Any()).Return(errors.New("failed to attach ELB"))
 				secretSvc.EXPECT().Create(gomock.Any(), gomock.Any()).Return("test", int32(1), nil).Times(1)
@@ -858,6 +883,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					instanceCreate(t, g)
 					ensureTag(t, g)
 					ms.AWSMachine.Annotations = map[string]string{TagsLastAppliedAnnotation: "12345"}
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err.Error()).To(ContainSubstring("json: cannot unmarshal number into Go value of type map[string]interface {}"))
@@ -877,6 +903,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.Annotations = map[string]string{TagsLastAppliedAnnotation: "{\"tag\":\"tag1\"}"}
 
 					ec2Svc.EXPECT().UpdateResourceTags(gomock.Any(), gomock.Any(), map[string]string{"tag": "tag1"}).Return(errors.New("failed to update resource tag"))
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).ToNot(BeNil())
@@ -908,6 +935,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.Annotations = map[string]string{SecurityGroupsLastAppliedAnnotation: "12345"}
 
 					ec2Svc.EXPECT().UpdateResourceTags(gomock.Any(), map[string]string{"tag": "\"old_tag\"\"\""}, gomock.Any()).Return(nil).AnyTimes()
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).ToNot(BeNil())
@@ -926,6 +954,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.Annotations = map[string]string{SecurityGroupsLastAppliedAnnotation: "{\"tag\":\"tag1\"}"}
 
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, errors.New("failed to get core security groups")).Times(1)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).ToNot(BeNil())
@@ -956,6 +985,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil)
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return([]string{"sg-1"}, errors.New("failed to get filtered SGs"))
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).ToNot(BeNil())
@@ -987,6 +1017,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil)
 					ec2Svc.EXPECT().UpdateInstanceSecurityGroups(gomock.Any(), gomock.Any()).Return(errors.New("failed to update security groups"))
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return([]string{"sg-1"}, nil)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).ToNot(BeNil())
@@ -1020,6 +1051,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ec2Svc.EXPECT().GetInstanceSecurityGroups(gomock.Any()).Return(map[string][]string{"eid": {}}, nil).Times(1)
 				ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 				ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 				ms.AWSMachine.ObjectMeta.Labels = map[string]string{
 					clusterv1.MachineControlPlaneLabel: "",
@@ -1064,6 +1096,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
 				ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 			})
 
@@ -1076,6 +1110,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				instance.State = infrav1.InstanceStateTerminated
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 			})
 
@@ -1089,6 +1125,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 				instance.State = infrav1.InstanceStateRunning
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 			})
 
@@ -1102,6 +1140,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ms.AWSMachine.Status.FailureReason = ptr.To(capierrors.UpdateMachineError)
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 			})
 			t.Run("should not attempt to delete the secret if InsecureSkipSecretsManager is set on CloudInit", func(t *testing.T) {
@@ -1115,6 +1155,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(0)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 
 				_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 			})
@@ -1136,6 +1177,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 				g.Expect(err).To(BeNil())
@@ -1158,6 +1200,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(0)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 				g.Expect(err).To(BeNil())
@@ -1194,6 +1237,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 				ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).MaxTimes(0)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 			})
 
@@ -1206,6 +1251,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 				instance.State = infrav1.InstanceStateTerminated
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 			})
 
@@ -1219,6 +1266,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 				instance.State = infrav1.InstanceStateRunning
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 			})
 
@@ -1232,6 +1281,8 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ms.AWSMachine.Status.FailureReason = ptr.To(capierrors.UpdateMachineError)
 				secretSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 				ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+				ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
+
 				_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 			})
 		})
@@ -1253,6 +1304,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				getInstances(t, g)
 
 				secretSvc.EXPECT().Create(gomock.Any(), gomock.Any()).Return(secretPrefix, int32(0), errors.New("connection error")).Times(1)
+
 				_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				g.Expect(err).ToNot(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring("connection error"))
@@ -1276,6 +1328,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 				ec2Svc.EXPECT().GetInstanceSecurityGroups(gomock.Any()).Return(map[string][]string{"eid": {}}, nil).Times(1)
 				ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 				ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
+				ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 				_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 
@@ -1332,6 +1385,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.ObjectMeta.Labels = map[string]string{
 						clusterv1.MachineControlPlaneLabel: "",
 					}
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).To(BeNil())
@@ -1367,6 +1421,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.ObjectMeta.Labels = map[string]string{
 						clusterv1.MachineControlPlaneLabel: "",
 					}
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 					g.Expect(err).To(BeNil())
@@ -1404,6 +1459,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				})
@@ -1418,6 +1474,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 					instance.State = infrav1.InstanceStateTerminated
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				})
@@ -1433,6 +1490,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					instance.State = infrav1.InstanceStateRunning
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 					ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+					ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 
 					_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 				})
@@ -1449,6 +1507,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.Status.FailureReason = ptr.To(capierrors.UpdateMachineError)
 
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
+					ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 					ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
 
 					_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
@@ -1479,6 +1538,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).MaxTimes(0)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				})
 
@@ -1492,6 +1552,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 
 					instance.State = infrav1.InstanceStateTerminated
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 					_, _ = reconciler.reconcileNormal(context.Background(), ms, cs, cs, cs, cs)
 				})
 
@@ -1506,6 +1567,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					instance.State = infrav1.InstanceStateRunning
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 					ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+					ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 					_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 				})
 
@@ -1521,6 +1583,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ms.AWSMachine.Status.FailureReason = ptr.To(capierrors.UpdateMachineError)
 					objectStoreSvc.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
 					ec2Svc.EXPECT().TerminateInstance(gomock.Any()).Return(nil).AnyTimes()
+					ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 					_, _ = reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 				})
 			})
@@ -1582,6 +1645,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ec2Svc.EXPECT().GetInstanceSecurityGroups(gomock.Any()).Return(map[string][]string{"eid": {}}, nil).Times(1)
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{}, nil).Times(1)
 					ec2Svc.EXPECT().GetAdditionalSecurityGroupsIDs(gomock.Any()).Return(nil, nil)
+					ec2Svc.EXPECT().ReconcileElasticIPFromPublicPool(gomock.Any()).Times(1)
 
 					ms.AWSMachine.ObjectMeta.Labels = map[string]string{
 						clusterv1.MachineControlPlaneLabel: "",
@@ -1765,6 +1829,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					ec2Svc.EXPECT().GetCoreSecurityGroups(gomock.Any()).Return([]string{"sg0", "sg1"}, nil)
 					ec2Svc.EXPECT().DetachSecurityGroupsFromNetworkInterface(groups, "eth0").Return(nil)
 					ec2Svc.EXPECT().DetachSecurityGroupsFromNetworkInterface(groups, "eth1").Return(nil)
+					ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 					g.Expect(err).To(BeNil())
@@ -1778,6 +1843,7 @@ func TestAWSMachineReconciler(t *testing.T) {
 					finalizer(t, g)
 					getRunningInstance(t, g)
 					terminateInstance(t, g)
+					ec2Svc.EXPECT().ReleaseElasticIP(gomock.Any()).Times(1)
 
 					_, err := reconciler.reconcileDelete(ms, cs, cs, cs, cs)
 					g.Expect(err).To(BeNil())
@@ -2722,6 +2788,7 @@ func TestAWSMachineReconcilerReconcileDefaultsToLoadBalancerTypeClassic(t *testi
 		Attribute:          aws.String("groupSet"),
 	})).Return(&ec2.DescribeNetworkInterfaceAttributeOutput{Groups: []*ec2.GroupIdentifier{{GroupId: aws.String("3")}}}, nil).MaxTimes(1)
 	ec2Mock.EXPECT().ModifyNetworkInterfaceAttributeWithContext(context.TODO(), gomock.Any()).AnyTimes()
+	ec2Mock.EXPECT().AssociateAddressWithContext(context.TODO(), gomock.Any()).MaxTimes(1)
 
 	_, err = reconciler.Reconcile(ctx, ctrl.Request{
 		NamespacedName: client.ObjectKey{

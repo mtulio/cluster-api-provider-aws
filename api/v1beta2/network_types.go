@@ -455,6 +455,9 @@ type VPCSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum:=ip-name;resource-name
 	PrivateDNSHostnameTypeOnLaunch *string `json:"privateDnsHostnameTypeOnLaunch,omitempty"`
+
+	// ElasticIPPool is the configuration to allocate Public IPv4 address (Elastic IP/EIP) from user-defined pools.
+	ElasticIPPool *ElasticIPPool `json:"elasticIpPool,omitempty"`
 }
 
 // String returns a string representation of the VPC.
@@ -475,6 +478,17 @@ func (v *VPCSpec) IsManaged(clusterName string) bool {
 // IsIPv6Enabled returns true if the IPv6 block is defined on the network spec.
 func (v *VPCSpec) IsIPv6Enabled() bool {
 	return v.IPv6 != nil
+}
+
+// GetPublicIpv4Pool returns the custom public IPv4 pool brought to AWS, and presented to the VPCSpec.
+func (v *VPCSpec) GetPublicIpv4Pool() *string {
+	if v.ElasticIPPool == nil {
+		return nil
+	}
+	if v.ElasticIPPool.PublicIpv4Pool != nil {
+		return v.ElasticIPPool.PublicIpv4Pool
+	}
+	return nil
 }
 
 // SubnetSpec configures an AWS Subnet.
@@ -1001,4 +1015,57 @@ func (z ZoneType) String() string {
 // Equal compares two zone types.
 func (z ZoneType) Equal(other ZoneType) bool {
 	return z == other
+}
+
+// PublicIpv4PoolFallbackOrder defines the list of available fallback
+// strategies when the PublicIpv4Pool is exhausted.
+// 'none' let the controllers return failures when the PublicIpv4Pool is exhausted - no more IPv4 available.
+// 'amazon-pool' let the controllers to skip the PublicIpv4Pool and use the Amazon pool, the default.
+// +kubebuilder:validation:XValidation:rule="self in ['none','amazon-pool']",message="allowed values are 'none' and 'amazon-pool'"
+type PublicIpv4PoolFallbackOrder string
+
+const (
+	// PublicIpv4PoolFallbackOrderAmazonPool refers to use Amazon-provided Public IPv4 Pool as a fallback strategy.
+	PublicIpv4PoolFallbackOrderAmazonPool = PublicIpv4PoolFallbackOrder("amazon-pool")
+
+	// PublicIpv4PoolFallbackOrderNone refers to not use any fallback strategy.
+	PublicIpv4PoolFallbackOrderNone = PublicIpv4PoolFallbackOrder("none")
+)
+
+func (r PublicIpv4PoolFallbackOrder) String() string {
+	return string(r)
+}
+
+// Equal compares PublicIpv4PoolFallbackOrder types and return true if input param is equal.
+func (r PublicIpv4PoolFallbackOrder) Equal(e PublicIpv4PoolFallbackOrder) bool {
+	return r == e
+}
+
+// ElasticIPPool defines the Elastic IP pools available to extend advanced networking configuration.
+type ElasticIPPool struct {
+	// PublicIpv4Pool defines the Public IPv4 Pool to be used for VPC resources created
+	// in public subnets.
+	//
+	// +kubebuilder:validation:MaxLength=30
+	// +kubebuilder:validation:XValidation:rule="self.startsWith('ipv4pool-ec2-')",message="publicIpv4Pool must start with 'ipv4pool-ec2-'"
+	// +optional
+	PublicIpv4Pool *string `json:"publicIpv4Pool,omitempty"`
+
+	// PublicIpv4PoolFallBackOrder defines the fallback when the Public IPv4 Pool has been exhausted,
+	// no more IPv4 address available in the pool.
+	//
+	// When amazon-provided, and the PublicIpv4Pool is set, the controller check if the pool has available IPv4,
+	// and if not it fallback to Amazon pool.
+	//
+	// When 'none' it will not use any fallback strategy and will fail to provision when the fallback
+	// is trigeredin public subnets.
+	//
+	// +kubebuilder:validation:Enum:=amazon-provided;none
+	// +optional
+	PublicIpv4PoolFallBackOrder *PublicIpv4PoolFallbackOrder `json:"publicIpv4PoolFallbackOrder,omitempty"`
+
+	// TODO(mtulio): the strucute currently holds only 'BYO Public IP from Public IPv4 Pool' (user brought to AWS),
+	// although a dedicated structure would help to hold 'BYO Elastic IP' variants like:
+	// - AllocationIdPoolApiLoadBalancer: an user-defined (static) IP address to the Public API Load Balancer.
+	// - AllocationIdPoolNatGateways: an user-defined (static) IP address to allocate to NAT Gateways (egress traffic).
 }
