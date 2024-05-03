@@ -19,6 +19,7 @@ package v1beta2
 import (
 	"fmt"
 
+	"github.com/awslabs/goformation/v4/cloudformation/ec2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/v2/api/v1beta2"
@@ -159,6 +160,35 @@ type AWSManagedMachinePoolSpec struct {
 	// are prohibited (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html).
 	// +optional
 	AWSLaunchTemplate *AWSLaunchTemplate `json:"awsLaunchTemplate,omitempty"`
+
+	// Engine specifies which engine to be used to manage the Machine Pool.
+	// asg [default]: create machines using AWS Auto Scaling Group (ASG).
+	// ec2fleet: create machines using EC2 Fleet.
+	// karpenter: create machines using Karpenter.
+	// +optional
+	Engine *MachinePoolEngine `json:"engine,omitempty"`
+
+	EC2Fleet *EC2FleetSpec `json:"ec2Fleet,omitempty"`
+}
+
+type MachinePoolEngine string
+
+const (
+	MachinePoolEngineASG       MachinePoolEngine = "asg"
+	MachinePoolEngineEC2Fleet  MachinePoolEngine = "ec2fleet"
+	MachinePoolEngineKarpenter MachinePoolEngine = "karpenter"
+)
+
+// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-fleet-examples.html#ec2-fleet-config12
+type EC2FleetSpec struct {
+	SpotOptions                 *ec2.EC2Fleet_SpotOptionsRequest `json:"spotOptions,omitempty"`
+	OnDemandOptions             *ec2.EC2Fleet_OnDemandOptionsRequest
+	LaunchTemplateOverrides     *ec2.EC2Fleet_FleetLaunchTemplateOverridesRequest
+	TargetCapacitySpecification *ec2.EC2Fleet_TargetCapacitySpecificationRequest
+}
+
+type EC2FleetStatus struct {
+	ID *string
 }
 
 // ManagedMachinePoolScaling specifies scaling options.
