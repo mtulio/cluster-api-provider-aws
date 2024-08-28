@@ -188,7 +188,11 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte, use
 	// Public address from BYO Public IPv4 Pools need to be associated after launch (main machine
 	// reconciliate loop) preventing duplicated public IP. The map on launch is explicitly
 	// disabled in instances with PublicIP defined to true.
-	if scope.AWSMachine.Spec.ElasticIPPool != nil && scope.AWSMachine.Spec.ElasticIPPool.PublicIpv4Pool != nil {
+	// if scope.AWSMachine.Spec.ElasticIPPool != nil && scope.AWSMachine.Spec.ElasticIPPool.PublicIpv4Pool != nil {
+	// 	input.PublicIPOnLaunch = ptr.To(false)
+	// }
+	s.scope.Debug("BYO IP Check -1")
+	if s.hasBYOPublicIP(scope) {
 		input.PublicIPOnLaunch = ptr.To(false)
 	}
 

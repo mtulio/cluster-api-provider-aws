@@ -536,15 +536,16 @@ func (r *AWSMachineReconciler) reconcileNormal(_ context.Context, machineScope *
 	// cluster-wide config Public IPv4 Pool configuration are set. The custom EIP is associated
 	// after the instance is created and transictioned to Running state.
 	// The CreateInstance() is enforcing to not assign public IP address when PublicIP is set with
-	// BYOIpv4 Pool, preventing a duplicated EIP creation.
-	if pool := machineScope.GetElasticIPPool(); pool != nil {
-		requeue, err := ec2svc.ReconcileElasticIPFromPublicPool(pool, instance)
+	// BYOIPv4 Pool, preventing a duplicated EIP creation.
+	// BYO EIP feature: associates an EIP to machine when PublicIP is set and EIP is associated.
+	if machineScope.HasPublicIP() {
+		requeue, err := ec2svc.ReconcileElasticIP(machineScope.GetElasticIPPool(), instance)
 		if err != nil {
-			machineScope.Error(err, "Failed to reconcile BYO Public IPv4")
+			machineScope.Error(err, "Failed to reconcile BYO IPv4")
 			return ctrl.Result{}, err
 		}
 		if requeue {
-			machineScope.Debug("Found instance in pending state while reconciling publicIpv4Pool, requeue", "instance", instance.ID)
+			machineScope.Debug("Found instance in pending state while reconciling BYO IPv4, requeue", "instance", instance.ID)
 			return ctrl.Result{RequeueAfter: DefaultReconcilerRequeue}, nil
 		}
 	}

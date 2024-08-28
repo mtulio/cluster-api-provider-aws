@@ -276,11 +276,11 @@ Once the user has created externally managed AWSCluster, it is not allowed to co
 User should only use this feature if their cluster infrastructure lifecycle management has constraints that the reference implementation does not support. See [user stories](https://github.com/kubernetes-sigs/cluster-api/blob/10d89ceca938e4d3d94a1d1c2b60515bcdf39829/docs/proposals/20210203-externally-managed-cluster-infrastructure.md#user-stories) for more details.
 
 
-## Bring your own (BYO) Public IPv4 addresses
+## Bring your own Public IPv4 address pool (BYO Public IPv4)
 
-Cluster API also provides a mechanism to allocate Elastic IP from the existing Public IPv4 Pool that you brought to AWS[1].
+Cluster API provides a mechanism to allocate Elastic IP from the existing Public IPv4 Pool that you brought to AWS[1].
 
-Bringing your own Public IPv4 Pool (BYOIPv4) can be used as an alternative to buying Public IPs from AWS, also considering the changes in charging for this since February 2024[2].
+Bringing your own Public IPv4 Pool (BYO Public IPv4) can be used as an alternative to buying Public IPs from AWS, also considering the changes in charging for this since February 2024[2].
 
 Supported resources to BYO Public IPv4 Pool (`BYO Public IPv4`):
 - NAT Gateways
@@ -340,3 +340,24 @@ spec:
 [2] https://aws.amazon.com/blogs/aws/new-aws-public-ipv4-address-charge-public-ip-insights/
 [3] https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-byoip.html#byoip-onboard
 [4] https://docs.aws.amazon.com/cli/latest/reference/ec2/advertise-byoip-cidr.html
+
+
+## Bring your own Elastic IP addresses (BYO EIP)
+
+Cluster API provides a mechanism to use existing Elastic IP addresses to the
+infrastructure resources when creating the managed cluster.
+
+Use `BYO EIP` when you want to have more control of Public IPs used by the cluster using
+'static IPs' on your infrastructure providing, for example, more control of firewall
+rules of ingress and egress traffic from your environment.
+
+Supported resources to use BYO EIP:
+- NAT Gateways: CAPA role `common`
+- Network Load Balancer for API server: CAPA role `lb-apiserver`
+- Machines: CAPA role `ec2-custom`
+
+### Overview
+
+The `BYO EIP` mechanism requires the Elastic IP (EIP) to be created with the required
+tags to CAPA find the allocated, and unassigned, EIP to be associated when creating
+the resources, such as Nat Gateways and Network Load Balancers.

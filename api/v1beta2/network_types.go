@@ -1086,12 +1086,6 @@ type ElasticIPPool struct {
 	// +kubebuilder:validation:Enum:=amazon-pool;none
 	// +optional
 	PublicIpv4PoolFallBackOrder *PublicIpv4PoolFallbackOrder `json:"publicIpv4PoolFallbackOrder,omitempty"`
-
-	// TODO(mtulio): add future support of user-defined Elastic IP to allow users to assign BYO Public IP from
-	// 'static'/preallocated amazon-provided IPsstrucute currently holds only 'BYO Public IP from Public IPv4 Pool' (user brought to AWS),
-	// although a dedicated structure would help to hold 'BYO Elastic IP' variants like:
-	// - AllocationIdPoolApiLoadBalancer: an user-defined (static) IP address to the Public API Load Balancer.
-	// - AllocationIdPoolNatGateways: an user-defined (static) IP address to allocate to NAT Gateways (egress traffic).
 }
 
 // PublicIpv4PoolFallbackOrder defines the list of available fallback action when the PublicIpv4Pool is exhausted.
