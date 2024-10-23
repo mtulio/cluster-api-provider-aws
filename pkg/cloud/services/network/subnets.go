@@ -140,10 +140,10 @@ func (s *Service) reconcileSubnets() error {
 			}
 
 			// Update subnet spec with the existing subnet details
+			subnetTags := sub.Tags
 			existingSubnet.DeepCopyInto(sub)
 
 			// Make sure tags are up-to-date.
-			subnetTags := sub.Tags
 			if err := wait.WaitForWithRetryable(wait.NewBackoff(), func() (bool, error) {
 				buildParams := s.getSubnetTagParams(unmanagedVPC, existingSubnet.GetResourceID(), existingSubnet.IsPublic, existingSubnet.AvailabilityZone, subnetTags, existingSubnet.IsEdge())
 				tagsBuilder := tags.New(&buildParams, tags.WithEC2(s.EC2Client))
