@@ -421,3 +421,37 @@ func (m *MachineScope) GetElasticIPPool() *infrav1.ElasticIPPool {
 	}
 	return m.AWSMachine.Spec.ElasticIPPool
 }
+
+func (m *MachineScope) HasDedicatedHostAllocated() bool {
+	if m.AWSMachine.Spec.DynamicHostAllocation == nil {
+		return false
+	}
+	if m.AWSMachine.Status.DedicatedHost == nil {
+		return false
+	}
+	if m.AWSMachine.Status.DedicatedHost.ID == nil || len(*m.AWSMachine.Status.DedicatedHost.ID) == 0 {
+		return false
+	}
+	return true
+}
+
+func (m *MachineScope) GetDedicatedHostID() *string {
+	if m.AWSMachine.Status.DedicatedHost == nil {
+		return nil
+	}
+	return m.AWSMachine.Status.DedicatedHost.ID
+}
+
+func (m *MachineScope) UpdateDedicatedHostReleaseFailureMessage(errMessage string) {
+	if len(errMessage) > 0 {
+		m.AWSMachine.Status.DedicatedHost.ReleaseFailureMessage = ptr.To(errMessage)
+	}
+	m.AWSMachine.Status.DedicatedHost.ReleaseFailureMessage = nil
+}
+
+func (m *MachineScope) UpdateDedicatedHostID(hostID string) {
+	if m.AWSMachine.Status.DedicatedHost == nil {
+		m.AWSMachine.Status.DedicatedHost = &infrav1.DedicatedHostStatus{}
+	}
+	m.AWSMachine.Status.DedicatedHost.ID = ptr.To(hostID)
+}

@@ -455,22 +455,21 @@ type AWSMachineStatus struct {
 	// +optional
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 
-	// DedicatedHostID tracks the dynamically allocated dedicated host ID.
+	// DedicatedHost tracks the dynamically allocated dedicated host.
 	// This field is populated when DynamicHostAllocation is used.
 	// +optional
-	DedicatedHostID *string `json:"dedicatedHostID,omitempty"`
+	DedicatedHost *DedicatedHostStatus `json:"dedicatedHost,omitempty"`
+}
 
-	// HostReleaseAttempts tracks the number of attempts to release the dedicated host.
+type DedicatedHostStatus struct {
+	// ID tracks the dynamically allocated dedicated host ID.
+	// This field is populated when DynamicHostAllocation is used.
 	// +optional
-	HostReleaseAttempts *int32 `json:"hostReleaseAttempts,omitempty"`
+	ID *string `json:"id,omitempty"`
 
-	// LastHostReleaseAttempt tracks the timestamp of the last attempt to release the dedicated host.
+	// ReleaseFailureMessage tracks the last failure message for the release host attempt.
 	// +optional
-	LastHostReleaseAttempt *metav1.Time `json:"lastHostReleaseAttempt,omitempty"`
-
-	// HostReleaseFailedReason tracks the reason for the last host release failure.
-	// +optional
-	HostReleaseFailedReason *string `json:"hostReleaseFailedReason,omitempty"`
+	ReleaseFailureMessage *string `json:"releaseFailureMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

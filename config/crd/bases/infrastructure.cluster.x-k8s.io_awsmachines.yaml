@@ -1261,11 +1261,21 @@ spec:
                   - type
                   type: object
                 type: array
-              dedicatedHostID:
+              dedicatedHost:
                 description: |-
-                  DedicatedHostID tracks the dynamically allocated dedicated host ID.
+                  DedicatedHost tracks the dynamically allocated dedicated host.
                   This field is populated when DynamicHostAllocation is used.
-                type: string
+                properties:
+                  id:
+                    description: |-
+                      ID tracks the dynamically allocated dedicated host ID.
+                      This field is populated when DynamicHostAllocation is used.
+                    type: string
+                  releaseFailureMessage:
+                    description: ReleaseFailureMessage tracks the last failure message
+                      for the release host attempt.
+                    type: string
+                type: object
               failureMessage:
                 description: |-
                   FailureMessage will be set in the event that there is a terminal problem
@@ -1304,15 +1314,6 @@ spec:
                   can be added as events to the Machine object and/or logged in the
                   controller's output.
                 type: string
-              hostReleaseAttempts:
-                description: HostReleaseAttempts tracks the number of attempts to
-                  release the dedicated host.
-                format: int32
-                type: integer
-              hostReleaseFailedReason:
-                description: HostReleaseFailedReason tracks the reason for the last
-                  host release failure.
-                type: string
               instanceState:
                 description: InstanceState is the state of the AWS instance for this
                   machine.
@@ -1322,11 +1323,6 @@ spec:
                   Interruptible reports that this machine is using spot instances and can therefore be interrupted by CAPI when it receives a notice that the spot instance is to be terminated by AWS.
                   This will be set to true when SpotMarketOptions is not nil (i.e. this machine is using a spot instance).
                 type: boolean
-              lastHostReleaseAttempt:
-                description: LastHostReleaseAttempt tracks the timestamp of the last
-                  attempt to release the dedicated host.
-                format: date-time
-                type: string
               ready:
                 description: Ready is true when the provider resource is ready.
                 type: boolean

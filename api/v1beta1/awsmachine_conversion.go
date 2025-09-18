@@ -63,10 +63,13 @@ func (src *AWSMachine) ConvertTo(dstRaw conversion.Hub) error {
 		}
 	}
 
-	dst.Status.DedicatedHostID = restored.Status.DedicatedHostID
-	dst.Status.HostReleaseAttempts = restored.Status.HostReleaseAttempts
-	dst.Status.LastHostReleaseAttempt = restored.Status.LastHostReleaseAttempt
-	dst.Status.HostReleaseFailedReason = restored.Status.HostReleaseFailedReason
+	if restored.Status.DedicatedHost != nil {
+		dst.Status.DedicatedHost = restored.Status.DedicatedHost
+		if restored.Status.DedicatedHost.ID != nil {
+			dst.Status.DedicatedHost.ID = restored.Status.DedicatedHost.ID
+		}
+		dst.Status.DedicatedHost.ReleaseFailureMessage = restored.Status.DedicatedHost.ReleaseFailureMessage
+	}
 
 	return nil
 }

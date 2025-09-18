@@ -20,11 +20,11 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/pkg/errors"
@@ -101,9 +101,9 @@ func (s *Service) AllocateDedicatedHost(ctx context.Context, spec *infrav1.Dynam
 	return hostID, nil
 }
 
-// ReleaseDedicatedHost releases a dedicated host with retry logic.
-// This function implements custom retry logic for dedicated host release operations
-// since they are expensive and should be retried on transient failures.
+// ReleaseDedicatedHost releases a dedicated host with enhanced retry logic.
+// This function uses AWS SDK v2's built-in retry mechanisms optimized for
+// dedicated host operations, which are expensive resources requiring robust retry handling.
 func (s *Service) ReleaseDedicatedHost(ctx context.Context, hostID string) error {
 	s.scope.Debug("Releasing dedicated host", "hostID", hostID)
 
@@ -111,85 +111,56 @@ func (s *Service) ReleaseDedicatedHost(ctx context.Context, hostID string) error
 		HostIds: []string{hostID},
 	}
 
-	// Retry configuration optimized for dedicated host release operations
-	// These are expensive resources, so we want to be more aggressive with retries
-	maxAttempts := 5
-	maxBackoff := 30 * time.Second
+	// Create a client with enhanced retry configuration for dedicated host operations
+	clientWithRetry := s.createClientWithDedicatedHostRetryConfig()
 
-	// Retryable error codes for dedicated host operations
-	retryableErrors := []string{
-		"RequestLimitExceeded",
-		"Throttling",
-		"ServiceUnavailable",
-		"InternalError",
-		"InvalidHostState",
-		"HostInUse",
-	}
-
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		output, err := s.EC2Client.ReleaseHosts(ctx, input)
-		if err == nil {
-			s.scope.Info("Successfully released dedicated host", "attempt", attempt, "output", "result", s.getReleaseHostsOutput(output))
-			record.Eventf(s.scope.InfraCluster(), "SuccessfulReleaseDedicatedHost", "Released dedicated host %s", hostID)
-			return nil
-		}
-
-		lastErr = err
-
-		// Check if this is a retryable error
+	output, err := clientWithRetry.ReleaseHosts(ctx, input)
+	if err != nil {
 		errorCode := s.getErrorCode(err)
-		isRetryable := false
-		for _, retryableCode := range retryableErrors {
-			if errorCode == retryableCode {
-				isRetryable = true
-				break
-			}
-		}
-
-		if !isRetryable {
-			s.scope.Error(err, "Non-retryable error releasing dedicated host", "errorCode", errorCode, "result", s.getReleaseHostsOutput(output))
-			record.Warnf(s.scope.InfraCluster(), "FailedReleaseDedicatedHost", "Failed to release dedicated host %s: %v", hostID, err)
-			return errors.Wrap(err, "failed to release dedicated host")
-		}
-
-		// If this is the last attempt, don't wait
-		if attempt >= maxAttempts {
-			break
-		}
-
-		// Calculate exponential backoff delay with jitter
-		baseDelay := time.Duration(1<<(attempt-1)) * time.Second
-		if baseDelay > maxBackoff {
-			baseDelay = maxBackoff
-		}
-		// Add jitter (±25% of the delay)
-		jitter := time.Duration(float64(baseDelay) * 0.25)
-		delay := baseDelay + time.Duration(float64(jitter)*(2*rand.Float64()-1))
-
-		s.scope.Info("Retrying dedicated host release after error",
+		s.scope.Error(err, "Failed to release dedicated host",
 			"hostID", hostID,
-			"attempt", attempt,
-			"maxAttempts", maxAttempts,
 			"errorCode", errorCode,
-			"delay", delay,
 			"result", s.getReleaseHostsOutput(output))
-
-		// Wait with context cancellation support
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
+		record.Warnf(s.scope.InfraCluster(), "FailedReleaseDedicatedHost", "Failed to release dedicated host %s: %v", hostID, err)
+		return errors.Wrap(err, "failed to release dedicated host")
 	}
 
-	// All retries exhausted
-	s.scope.Error(lastErr, "Failed to release dedicated host after all retries",
+	s.scope.Info("Successfully released dedicated host",
 		"hostID", hostID,
-		"maxAttempts", maxAttempts)
-	record.Warnf(s.scope.InfraCluster(), "FailedReleaseDedicatedHost", "Failed to release dedicated host %s after %d attempts: %v", hostID, maxAttempts, lastErr)
-	return errors.Wrap(lastErr, "failed to release dedicated host after all retries")
+		"result", s.getReleaseHostsOutput(output))
+	record.Eventf(s.scope.InfraCluster(), "SuccessfulReleaseDedicatedHost", "Released dedicated host %s", hostID)
+	return nil
+}
+
+// createClientWithDedicatedHostRetryConfig creates an EC2 client with enhanced retry configuration
+// specifically optimized for dedicated host operations using RetryerV2 interface.
+func (s *Service) createClientWithDedicatedHostRetryConfig() *ec2.Client {
+	// Get the base configuration from the service's session
+	cfg := s.scope.Session()
+
+	// Create a custom RetryerV2 for dedicated host operations
+	// Using AWS SDK's built-in adaptive retry mode which implements RetryerV2
+	dedicatedHostRetryer := retry.NewAdaptiveMode(func(o *retry.AdaptiveModeOptions) {
+		// More aggressive retry configuration for expensive dedicated host operations
+		o.StandardOptions = append(o.StandardOptions, func(so *retry.StandardOptions) {
+			so.MaxAttempts = 5                                          // Maximum retry attempts
+			so.MaxBackoff = 30 * time.Second                            // Maximum backoff time
+			so.Backoff = retry.NewExponentialJitterBackoff(time.Second) // 1 second initial delay with built-in jitter
+		})
+	})
+
+	// Override the retry configuration in the config using RetryerV2
+	// RetryerV2 provides better context handling and granular control over retry attempts
+	cfg.Retryer = func() aws.Retryer {
+		return dedicatedHostRetryer // AdaptiveMode implements aws.RetryerV2
+	}
+
+	// Create a new client with the enhanced RetryerV2 configuration
+	// The RetryerV2 interface provides:
+	// - GetAttemptToken(context.Context) for context-aware retry decisions
+	// - Better integration with AWS SDK v2's context handling
+	// - More granular control over retry behavior
+	return ec2.NewFromConfig(cfg)
 }
 
 // getErrorCode extracts the error code from an AWS error.
@@ -272,7 +243,13 @@ func (s *Service) getReleaseHostsOutput(output *ec2.ReleaseHostsOutput) string {
 		return strings.Join(output.Successful, ", ")
 	} else if output.Unsuccessful != nil {
 		for _, err := range output.Unsuccessful {
-			errs = append(errs, fmt.Sprintf("Resource ID: %s, Error Code: %s, Error Message: %s", aws.ToString(err.ResourceId), aws.ToString(err.Error.Code), aws.ToString(err.Error.Message)))
+			var errResource string
+			if err.Error != nil {
+				errResource = fmt.Sprintf("Resource ID: %s, Error code: %s, Error message: %s", aws.ToString(err.ResourceId), aws.ToString(err.Error.Code), aws.ToString(err.Error.Message))
+			} else {
+				errResource = fmt.Sprintf("Resource ID: %s", aws.ToString(err.ResourceId))
+			}
+			errs = append(errs, errResource)
 		}
 		return strings.Join(errs, ", ")
 	}

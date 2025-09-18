@@ -1480,10 +1480,7 @@ func autoConvert_v1beta2_AWSMachineStatus_To_v1beta1_AWSMachineStatus(in *v1beta
 	out.FailureReason = (*string)(unsafe.Pointer(in.FailureReason))
 	out.FailureMessage = (*string)(unsafe.Pointer(in.FailureMessage))
 	out.Conditions = *(*apiv1beta1.Conditions)(unsafe.Pointer(&in.Conditions))
-	// WARNING: in.DedicatedHostID requires manual conversion: does not exist in peer-type
-	// WARNING: in.HostReleaseAttempts requires manual conversion: does not exist in peer-type
-	// WARNING: in.LastHostReleaseAttempt requires manual conversion: does not exist in peer-type
-	// WARNING: in.HostReleaseFailedReason requires manual conversion: does not exist in peer-type
+	// WARNING: in.DedicatedHost requires manual conversion: does not exist in peer-type
 	return nil
 }
 
